@@ -22,7 +22,7 @@ seu.HQ.counts <- GetAssayData(seu_HQ, assay = "RNA")
 
 setwd('/Users/ibishara/Desktop/FELINE_C1/downsample/')
 path.list <- list.files(path = getwd(), pattern = ".*down_.*\\.txt", recursive = TRUE) # create a list of downsampled count tables
-
+path.list <- path.list[ !grepl("reads_downsample/round/|reads_downsample/nofloor/|genes_downsample/binary/", path.list) ]
 # Notes:
 # var1 <- counts/genes table path
 # var2 <- classified variable e.g. Lineage, Cell type. Has to be a column name in metadata entered as a character ""
@@ -36,9 +36,9 @@ path.list <- list.files(path = getwd(), pattern = ".*down_.*\\.txt", recursive =
 
 foo <- function(var1, var2, ncells, nGenes){
 
-# var1 <- "reads_downsample/floor/reads_down_1.0.txt"
-# var2 <- 'Lineage'
-# ncells <- 200
+# var1 <- "reads_downsample/floor/reads_down_5.0.txt"
+# var2 <- 'Celltype'
+# ncells <- 400
 # nGenes <- 25
 
         if(substr(var1, 18, 20) == 'bin'){ output.dir <- 'model_performance_genes_binary_without_normal_pdf/'  
@@ -47,8 +47,11 @@ foo <- function(var1, var2, ncells, nGenes){
                 method <- 'non-binary'
         } else if(substr(var1, 18, 20) == 'flo'){ output.dir <- 'model_performance_reads_floor_without_normal_pdf/'  
                 method <- 'floor'
-        } else{ output.dir <- 'model_performance_reads_nofloor_without_normal_pdf/' 
-                method <- 'no-floor' }
+        } else if(substr(var1, 18, 20) == 'nof'){ output.dir <- 'model_performance_reads_nofloor_without_normal_pdf/' 
+                method <- 'no-floor' 
+        } else if(substr(var1, 18, 20) == 'rou'){ output.dir <- 'model_performance_reads_round_without_normal_pdf/' 
+        method <- 'no-floor' }
+        
         dir.create(output.dir )
         condition <- str_sub(var1, -18, -5) # capture the condition of counts e.g., genes/reads and subsample threshold
         print(noquote(paste('processing', var1)))
@@ -56,13 +59,14 @@ foo <- function(var1, var2, ncells, nGenes){
         counts <- as.data.frame(fread( var1, sep='\t')) # downsamples counts 
         rownames(counts) <- counts$V1
         counts$V1 <- NULL
-        if(var2 == 'Lineage') { markers <- lineage.markers }
-        else if( var2 == 'Celltype') { markers <- celltype.markers }
+        if(var2 == 'Lineage') { markers <- lineage.markers 
+        } else if( var2 == 'Celltype') { markers <- celltype.markers }
 
         common.genes <- intersect(intersect(rownames(seu.HQ.counts), markers$gene), rownames(counts))
 
         seu.HQ.counts <- seu.HQ.counts[common.genes, ]
-        counts <- counts[common.genes, ]
+        # counts <- counts[common.genes, ] ## issue: This step reduces the number of genes hence yield worse performance/bias 
+
         #prevent overlap between training and validation cells 
         meta.sub <- meta[colnames(counts) ,] # Since count table is a subset of all cells (transformed cells), this is added to only sample cells from transformed matrix
          
@@ -73,9 +77,9 @@ foo <- function(var1, var2, ncells, nGenes){
         expTest = counts[ ,rownames(stTest)]
 
         #Sample for training from untransformed data
-        meta.train <- meta[ rownames(stTestList[[2]]) ,] # all not sampled transformed cells are available for training 
+        meta.train <- meta[!rownames(meta) %in% rownames(stTestList[[1]]) ,]  # all other non used cells available for training 
 
-        stList = splitCommon(sampTab = meta.sub, ncells = ncells, dLevel = var2)
+        stList = splitCommon(sampTab = meta.train, ncells = ncells, dLevel = var2)
         stTrain = stList[[1]]
         expTrain = seu.HQ.counts[, rownames(stTrain)]
 
@@ -99,49 +103,53 @@ foo <- function(var1, var2, ncells, nGenes){
         threshold <- str_sub(condition, -3, -1)
         avg.reads <- mean(total)
         method <- substr(output.dir, 25, 29)
+        # summary out
         out <- c(var2, table_type, threshold, method, AUC, ncells, nGenes, avg.reads)
 
+        # total ditribution 
+        dist <- list(total)
+        names(dist) <- paste(method, '_', condition, sep='')
+        
         ## total in binary represents number of genes. total in non-binary represents counts. add if statement to get number of genes. 
         print(noquote('Generating plots'))
         # plots 
         pdf(paste(output.dir, condition, '_', var2, '.pdf', sep = ''))
-
                 hist(total, main = paste(condition, 'by', var2, sep = ' '))
                 plot(plot_PRs(tm_heldoutassessment))
                 plot(plot_attr(classRes = classRes_val_all, sampTab=stTest, nrand=50, dLevel=var2, sid="Cell.ID"))
                 plot(plot_metrics(tm_heldoutassessment))
-
         dev.off()
-
-
-
-        return(out)  # needs to be collected somewhere along with condition
+        return(out)  # returns summary and total 
 }
 
-
-output.vectors1 <- lapply(path.list, FUN = foo, var2 = 'Lineage', ncells = 200, nGenes = 25)
+# out
+output.vectors1 <- lapply(path.list, FUN = foo, var2 = 'Lineage', ncells = 400, nGenes = 25)
 output1 <- do.call(rbind, output.vectors1)
-output.vectors2 <- lapply(path.list, FUN = foo, var2 = 'Celltype', ncells = 100, nGenes = 25)
+output.vectors2 <- lapply(path.list, FUN = foo, var2 = 'Celltype', ncells = 200, nGenes = 25)
 output2 <- do.call(rbind, output.vectors2)
 output <- rbind(output1, output2)
+colnames(output) <- c( 'class.var', 'source', 'threshold','method', 'AUC',  'nCells', 'nGenes', 'avg.UMI/genes')
+write.table(output, 'performance_summary_400_200cells.txt', col.names = TRUE, sep = '\t') 
 
-colnames(output) <- c( 'class.var', 'source', 'threshold', 'AUC', 'method', 'nCells', 'nGenes', 'avg.UMI/genes')
 
-write.table(output, 'performance_summary.txt', col.names = TRUE, sep = '\t') 
+# dist
+output.vectors1 <- lapply(path.list, FUN = foo, var2 = 'Lineage', ncells = 400, nGenes = 25)
+output1 <- do.call(cbind, output.vectors1)
+output.vectors2 <- lapply(path.list, FUN = foo, var2 = 'Celltype', ncells = 200, nGenes = 25)
+output2 <- do.call(cbind, output.vectors2)
+
 
 
 output <- as.data.frame(output)
-# output.binary <- output[output$method =='binary',]
-# output.nonbinary <- output[output$source =='reads',]
 
-pdf('performance_summary.pdf')
+pdf('performance_summary_400_200cells.pdf')
 
-        ggplot(output[output$source == 'genes' & output$method == 'binary',], aes(as.factor(threshold), as.numeric(AUC)  )) + 
+        ggplot(output[output$source == 'genes' & output$method == 'binar',], aes(as.factor(threshold), as.numeric(AUC)  )) + 
         geom_point(aes(color = as.factor(class.var))) + 
         ggtitle("nFeature reduction - binary") +
         xlab("number of genes (x1000)") + ylab("AUPRC")+ labs(color='Class') 
 
-        ggplot(output[output$source == 'genes' & output$method == 'non-binary',], aes(as.factor(threshold), as.numeric(AUC)  )) + 
+        ggplot(output[output$source == 'genes' & output$method == 'nonbi',], aes(as.factor(threshold), as.numeric(AUC)  )) + 
         geom_point(aes(color = as.factor(class.var))) + 
         ggtitle("nFeature reduction - non-binary") +
         xlab("number of genes (x1000)") + ylab("AUPRC")+ labs(color='Class') 
@@ -151,13 +159,21 @@ pdf('performance_summary.pdf')
         ggtitle("nReads reduction - floor") +
         xlab("number of UMI (x1000)") + ylab("AUPRC")+ labs(color='Class') 
 
-        ggplot(output[output$source == 'reads' & output$method == 'no-floor',], aes(as.factor(threshold), as.numeric(AUC)  )) + 
+        ggplot(output[output$source == 'reads' & output$method == 'noflo',], aes(as.factor(threshold), as.numeric(AUC)  )) + 
         geom_point(aes(color = as.factor(class.var))) + 
         ggtitle("nReads reduction - no-floor") +
         xlab("number of UMI (x1000)") + ylab("AUPRC")+ labs(color='Class') 
+
+        ggplot(output[output$source == 'reads' & output$method == 'round',], aes(as.factor(threshold), as.numeric(AUC)  )) + 
+        geom_point(aes(color = as.factor(class.var))) + 
+        ggtitle("nReads reduction - round") +
+        xlab("number of UMI (x1000)") + ylab("AUPRC")+ labs(color='Class') 
+
+        # ggplot()
+        # ggarrange(grobs = plot1, plot2, plot3, plot4, plot5, plot6, ncol=2, nrow=3, heights=c(200, 200, 200), widths = c(200,200), common.legend = TRUE) #common.legend = TRUE, legend="bottom")
+
 dev.off()
 
 #########################################################
 
 ## Mitochondrial content
-

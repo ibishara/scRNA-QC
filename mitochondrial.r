@@ -126,10 +126,13 @@ plot_metrics(tm_heldoutassessment)
 
 
 
-x <- seu.HQ.counts[grep('LINC', rownames(seu.HQ.counts)),]
+x <- seu.HQ.counts[-grep('LINC', rownames(seu.HQ.counts)),]
 x[x > 0] <- 1 
 y <- as.data.frame(cbind(meta,colSums(x)))
-names(y)[names(y) == "colSums(x)"] <- "LincRNA_genes"
+names(y)[names(y) == "colSums(x)"] <- "LincRNA_genes" 
+names(y)[names(y) == "LincRNA_genes"] <- "non_LincRNA_genes" 
+
+
 
 hist(colSums(x), breaks = 50) # number of lncRNA expressed/captured 
 
@@ -141,8 +144,8 @@ plot(colSums(x), log10(y[rownames(y) %in% colnames(x), ]$nCount_RNA) , xlab= 'Li
 
 
 
-ggplot(y, aes(log10(nFeature_RNA), log10(nCount_RNA))) + 
-geom_point ()
+ggplot(y, aes(non_LincRNA_genes, log10(nCount_RNA), fill = )) + 
+geom_point (aes( color = orig.ident))
 
 
 colSums(seu.HQ.counts[!grepl('LINC', rownames(seu.HQ.counts)),]) # non.mito counts/cell

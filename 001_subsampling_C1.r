@@ -10,7 +10,7 @@ library(data.table)
 library(stringr)
 
 
-# data
+# data | issue, this meta doesn't contain perc. mito, use different meta file 
 ref <- as.data.frame(fread('/Users/ibishara/Desktop/FELINE_C1/post-filter/FEL001046_scRNA.metadata_JF.txt', sep='auto')) # post-filtered metadata as a reference for "high-quality" cells
 filtered_HQ_cellID <- ref[ref$Platform == '10x','Cell.ID'] # cell ids filtered for 10X technology 
 dim(ref)
@@ -23,7 +23,7 @@ meta.filter.list <- lapply(paste('raw/FELINE_cellranger_premRNA/', all.meta, sep
 meta.data <- as.data.frame(fread(x, sep='auto'))
 # subset cells by quality, subsample and annotate metadata
 meta.data_HQ <- meta.data[ meta.data$Cell %in% filtered_HQ_cellID,]
-meta_HQ_sub <- meta.data_HQ[sample(nrow(meta.data_HQ), round(0.1 * nrow(meta.data_HQ))), ] # subsample 10% cells 
+meta_HQ_sub <- meta.data_HQ[sample(nrow(meta.data_HQ), round(0.2 * nrow(meta.data_HQ))), ] # subsample 10% cells 
 # meta_HQ_sub['Quality'] <- rep('high', nrow(meta_HQ_sub) )
 
 # meta.data_LQ <- meta.data[! meta.data$Cell %in% filtered_HQ_cellID,]

@@ -53,23 +53,23 @@ for (i in threshold){
     fwrite(b, paste(bpath, '.txt', sep=''), sep='\t', nThread = 16, row.names = TRUE)
     fwrite(n, paste(npath, '.txt', sep=''), sep='\t', nThread = 16, row.names = TRUE) 
 
-    # # export binary hist and stats 
-    # btotal <- colSums(b)
-    # sdat <- summary(btotal)   
-    # summStr <- paste(names(sdat), format(sdat, digits = 2), collapse = "; ")
-    # pdf(paste(bpath,'.pdf', sep=''), onefile =FALSE)
-    # plot(hist(btotal), xlab = 'nGenes/cell', main = paste('cut-off', y, '# genes'), sub = summStr, col="#53b478") 
-    # dev.off()
+    # export binary hist and stats 
+    btotal <- colSums(b)
+    sdat <- summary(btotal)   
+    summStr <- paste(names(sdat), format(sdat, digits = 2), collapse = "; ")
+    pdf(paste(bpath,'.pdf', sep=''), onefile =FALSE)
+    plot(hist(btotal), xlab = 'nGenes/cell', main = paste('cut-off', y, '# genes'), sub = summStr, col="#53b478") 
+    dev.off()
 
 
-    # # export non-binary hist and stats 
-    # n[n > 0] <- 1  # convert reads to binary to calculate n genes
-    # ntotal <- colSums(n)
-    # sdat <- summary(ntotal)   
-    # summStr <- paste(names(sdat), format(sdat, digits = 2), collapse = "; ")
-    # pdf(paste(npath,'.pdf', sep=''), onefile =FALSE)
-    # plot(hist(ntotal), xlab = 'nGenes/cell', main = paste('cut-off', y, '# genes'), sub = summStr, col="#539cb4") 
-    # dev.off()
+    # export non-binary hist and stats 
+    n[n > 0] <- 1  # convert reads to binary to calculate n genes
+    ntotal <- colSums(n)
+    sdat <- summary(ntotal)   
+    summStr <- paste(names(sdat), format(sdat, digits = 2), collapse = "; ")
+    pdf(paste(npath,'.pdf', sep=''), onefile =FALSE)
+    plot(hist(ntotal), xlab = 'nGenes/cell', main = paste('cut-off', y, '# genes'), sub = summStr, col="#539cb4") 
+    dev.off()
 
 }
 

@@ -36,7 +36,7 @@ fl00r <- function(x, y){
 
 nofl00r <- function(x, y){
     total <- sum(x) # total counts for current cell 
-    x <- (y/total)*x # mutliply all gene counts by a fraction without flooring
+    x <- round((y/total)*x, 1) # mutliply all gene counts by a fraction with rounding to 2 significant figures (reduce size)
 
     return(x)
 }

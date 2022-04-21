@@ -102,4 +102,8 @@ seu_HQ <- FindClusters(seu_HQ, resolution = 0.4) # mod from resolution= 0.5
 
 #UMAP
 seu_HQ <- RunUMAP(seu_HQ, dims = 1:20)
-DimPlot(seu_HQ, reduction = "umap", group.by = 'Celltype') # infercnv_annotation  FinalAnnotation
+DimPlot(seu_HQ, reduction = "umap", group.by = 'Lineage') # infercnv_annotation  FinalAnnotation
+
+
+ggplot(seu_HQ@meta.data, aes(seu_HQ@meta.data$nFeature_RNA, log10( seu_HQ@meta.data$nCount_RNA))) +
+geom_point()

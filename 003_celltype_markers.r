@@ -4,6 +4,7 @@
 setwd('/Users/ibishara/Desktop/FELINE_C1/')
 #packages
 library(Seurat)
+library(qs)
 
 # data
 seu_HQ <- qread(file = "seu_HQ.qs", nthreads = 16)
