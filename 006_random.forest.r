@@ -24,8 +24,8 @@ seu.HQ.counts <- GetAssayData(seu_HQ, assay = "RNA")
 
 setwd('/Users/ibishara/Desktop/FELINE_C1/downsample/')
 path.list <- list.files(path = getwd(), pattern = ".*down_.*\\.txt", recursive = TRUE) # create a list of downsampled count tables
-# path.list <- path.list[ !grepl("reads_downsample/round/|reads_downsample/nofloor/|genes_downsample/binary/", path.list) ] #temp
-
+path.list <- path.list[ !grepl("reads_downsample/round/|reads_downsample/nofloor/", path.list) ] #temp
+path.list <- path.list[1:2]
 # Notes:
 # var1 <- counts/genes table path
 # var2 <- classified variable e.g. Lineage, Cell type. Has to be a column name in metadata entered as a character ""
@@ -107,12 +107,12 @@ foo <- function(var1, var2, ncells, nGenes){
         avg.reads <- mean(total)
         method <- substr(output.dir, 25, 29)
         # summary out
-        out <- list(c(var2, table_type, threshold, method, AUC, ncells, nGenes, avg.reads)) ### Turning both to lists can export list of list of list
+        summ <- list(var2, table_type, threshold, method, AUC, ncells, nGenes, avg.reads) ### Turning both to lists can export list of list of list
 
         # total ditribution 
         dist <- list(total)
-        names(dist) <- paste(method, '_', condition, sep='')
         
+        out <- list(summ, dist)
         ## total in binary represents number of genes. total in non-binary represents counts. add if statement to get number of genes. 
         print(noquote('Generating plots'))
         # plots 
@@ -122,37 +122,36 @@ foo <- function(var1, var2, ncells, nGenes){
                 plot(plot_attr(classRes = classRes_val_all, sampTab=stTest, nrand=50, dLevel=var2, sid="Cell"))
                 plot(plot_metrics(tm_heldoutassessment))
         dev.off()
-        return(dist)  # returns summary and total 
+        return(out)  # returns summary and total 
 }
 
 numCores <- detectCores()
 numCores
 # out
-system.time(
-output.vectors1 <- lapply(path.list, FUN = foo, var2 = 'Lineage', ncells = 400, nGenes = 25)
-)
-system.time(
-output.vectors1 <- mclapply(path.list, FUN = foo, var2 = 'Lineage', ncells = 400, nGenes = 25, mc.cores= numCores)
-)
 
-output1 <- do.call(rbind, output.vectors1)
-output.vectors1 <- lapply(path.list, FUN = foo, var2 = 'Celltype', ncells = 400, nGenes = 25)
-output2 <- do.call(rbind, output.vectors2)
-output <- rbind(output1, output2)
-colnames(output) <- c( 'class.var', 'source', 'threshold','method', 'AUC',  'nCells', 'nGenes', 'avg.UMI/genes')
-write.table(output, 'performance_summary_400_400cells.txt', col.names = TRUE, sep = '\t') 
+output.list <- mclapply(path.list, FUN = foo, var2 = 'Lineage', ncells = 400, nGenes = 25, mc.cores= numCores)
+summ.lineage <- do.call(rbind, output.list[1])
+# output1 <- 
+output.list <- mclapply(path.list, FUN = foo, var2 = 'Celltype', ncells = 400, nGenes = 25, mc.cores= numCores)
+summ.celltype <- do.call(rbind, output.list[1])
+comb.summ <- rbind(summ.lineage, summ.celltype )
+colnames(comb.summ) <- c( 'class.var', 'source', 'threshold','method', 'AUC',  'nCells', 'nGenes', 'avg.UMI/genes')
+# write.table(output, 'performance_summary_400_400cells.txt', col.names = TRUE, sep = '\t') 
 
 
 # dist
-system.time(
+condition <- str_sub(substr(path.list, 18, nchar(path.list)), -30, -5) # capture the condition of counts e.g., genes/reads and subsample threshold
+
+
 output.vectors1 <- mclapply(path.list, FUN = foo, var2 = 'Lineage', ncells = 400, nGenes = 25, mc.cores= numCores)
-)
 output1 <- do.call(cbind, output.vectors1)
+names(output1) <- condition
 write.table(output1, 'lineage_distributions_by_condition.txt', col.names = TRUE, sep = '\t') 
 
-output.vectors2 <- lapply(path.list, FUN = foo, var2 = 'Celltype', ncells = 200, nGenes = 25)
+output.vectors2 <- mclapply(path.list, FUN = foo, var2 = 'Celltype', ncells = 400, nGenes = 25, mc.cores= numCores)
 output2 <- do.call(cbind, output.vectors2)
-write.table(output1, 'celltype_distributions_by_condition.txt', col.names = TRUE, sep = '\t') 
+names(output2) <- condition
+write.table(output2, 'celltype_distributions_by_condition.txt', col.names = TRUE, sep = '\t') 
 
 
 

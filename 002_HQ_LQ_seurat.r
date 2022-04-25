@@ -30,6 +30,17 @@ meta_sub <- as.data.frame(fread('metadata_subsample_HQ.txt', sep='auto')) # Jinf
 rownames(meta_sub) <- meta_sub$Cell
 meta_sub$V1 <- NULL
 
+
+
+# recalculate nCount and nFeature
+
+sorted_counts <- colSums(COH047_counts)[order(names(COH047_counts))] 
+sorted_meta <- COH047_meta[order(rownames(COH047_meta)) ,]
+
+meta_sub$nCount_RNA = colSums(x = object, slot = "counts")  # nCount_RNA
+nFeature = colSums(x = GetAssayData(object = object, slot = "counts") > 0)  # nFeatureRNA
+
+
 # # data clean-up
 # meta_sub <- meta_singler[ colnames(counts), ] # filter metadata with singleR 
 # meta_sub <- meta_sub[!duplicated(meta_sub$Cell),] # remove duplicates 
