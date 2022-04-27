@@ -39,10 +39,10 @@ path.list <- path.list[1:2]
 
 foo <- function(var1, var2, ncells, nGenes){
 
-# var1 <- "reads_downsample/floor/reads_down_2.0.txt"
-# var2 <- 'Celltype'
-# ncells <- 400
-# nGenes <- 25
+var1 <- "reads_downsample/floor/reads_down_2.0.txt"
+var2 <- 'Celltype'
+ncells <- 400
+nGenes <- 25
 
         if(substr(var1, 18, 20) == 'bin'){ output.dir <- 'model_performance_genes_binary_without_normal_pdf/'  
                 method <- 'binary'
@@ -107,10 +107,10 @@ foo <- function(var1, var2, ncells, nGenes){
         avg.reads <- mean(total)
         method <- substr(output.dir, 25, 29)
         # summary out
-        summ <- list(var2, table_type, threshold, method, AUC, ncells, nGenes, avg.reads) ### Turning both to lists can export list of list of list
+        summ <- c(var2, table_type, threshold, method, AUC, ncells, nGenes, avg.reads) ### Turning both to lists can export list of list of list
 
         # total ditribution 
-        dist <- list(total)
+        dist <- c(total)
         
         out <- list(summ, dist)
         ## total in binary represents number of genes. total in non-binary represents counts. add if statement to get number of genes. 
@@ -122,12 +122,13 @@ foo <- function(var1, var2, ncells, nGenes){
                 plot(plot_attr(classRes = classRes_val_all, sampTab=stTest, nrand=50, dLevel=var2, sid="Cell"))
                 plot(plot_metrics(tm_heldoutassessment))
         dev.off()
-        return(out)  # returns summary and total 
+        return(summ)  # returns summary and total 
 }
 
 numCores <- detectCores()
 numCores
 # out
+ # output.list <- lapply(path.list, FUN = foo, var2 = 'Lineage', ncells = 400, nGenes = 25)
 
 output.list <- mclapply(path.list, FUN = foo, var2 = 'Lineage', ncells = 400, nGenes = 25, mc.cores= numCores)
 summ.lineage <- do.call(rbind, output.list[1])
@@ -136,7 +137,7 @@ output.list <- mclapply(path.list, FUN = foo, var2 = 'Celltype', ncells = 400, n
 summ.celltype <- do.call(rbind, output.list[1])
 comb.summ <- rbind(summ.lineage, summ.celltype )
 colnames(comb.summ) <- c( 'class.var', 'source', 'threshold','method', 'AUC',  'nCells', 'nGenes', 'avg.UMI/genes')
-# write.table(output, 'performance_summary_400_400cells.txt', col.names = TRUE, sep = '\t') 
+write.table(comb.summ, 'performance_summary_400_400cells.txt', col.names = TRUE, sep = '\t') 
 
 
 # dist
@@ -152,6 +153,14 @@ output.vectors2 <- mclapply(path.list, FUN = foo, var2 = 'Celltype', ncells = 40
 output2 <- do.call(cbind, output.vectors2)
 names(output2) <- condition
 write.table(output2, 'celltype_distributions_by_condition.txt', col.names = TRUE, sep = '\t') 
+
+
+
+
+
+output <- read.table('performance_summary_400_400cells.txt',  sep = '\t', header = TRUE) 
+output1 <- fread( 'lineage_distributions_by_condition.txt', sep = '\t') 
+output2 <- read.table('celltype_distributions_by_condition.txt', header = TRUE, sep = '\t') 
 
 
 

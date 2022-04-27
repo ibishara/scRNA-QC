@@ -55,16 +55,16 @@ threshold <- c(200, 400, 600, 800, 1000, 1500, 2000, 2500, 3000, 4000, 5000)
 for (i in threshold){
     y <- i
     f <- parent(x = counts, y = y, fun = fl00r) # transformed dataframe (floored)
-    n <- parent(x = counts, y = y, fun = nofl00r) # transformed dataframe (no-floor)
-    r <- parent(x = counts, y = y, fun = r0und) # transformed dataframe (round to integers)
+    # n <- parent(x = counts, y = y, fun = nofl00r) # transformed dataframe (no-floor)
+    # r <- parent(x = counts, y = y, fun = r0und) # transformed dataframe (round to integers)
 
     fpath <- paste('downsample/reads_downsample/floor/reads_down_', format(y/1000, nsmall=1), sep='')
-    npath <- paste('downsample/reads_downsample/nofloor/reads_down_', format(y/1000, nsmall=1), sep='')
-    rpath <- paste('downsample/reads_downsample/round/reads_down_', format(y/1000, nsmall=1), sep='')
+    # npath <- paste('downsample/reads_downsample/nofloor/reads_down_', format(y/1000, nsmall=1), sep='')
+    # rpath <- paste('downsample/reads_downsample/round/reads_down_', format(y/1000, nsmall=1), sep='')
 
     fwrite(f, paste(fpath, '.txt', sep=''), sep='\t', nThread = 16, row.names = TRUE)
-    fwrite(n, paste(npath, '.txt', sep=''), sep='\t', nThread = 16, row.names = TRUE) 
-    fwrite(r, paste(rpath, '.txt', sep=''), sep='\t', nThread = 16, row.names = TRUE) 
+    # fwrite(n, paste(npath, '.txt', sep=''), sep='\t', nThread = 16, row.names = TRUE) 
+    # fwrite(r, paste(rpath, '.txt', sep=''), sep='\t', nThread = 16, row.names = TRUE) 
 
 
     # export floor hist and stats 
@@ -77,23 +77,23 @@ for (i in threshold){
     dev.off()
 
 
-    # export nofloor hist and stats 
-    ntotal <- colSums(n)
-    sdat <- summary(ntotal)   
-    summStr <- paste(names(sdat), format(sdat, digits = 2), collapse = "; ")
-    op <- par(mar = c(7,4,4,2) + 0.1, cex = 0.5)
-    pdf(paste(npath,'.pdf', sep=''), onefile =FALSE)
-    plot(hist(ntotal), xlab = 'nReads/cell', main = paste('cut-off', y, 'UMI'), sub = summStr, col="#d74a4a") # ;     par(op)
-    dev.off()
+    # # export nofloor hist and stats 
+    # ntotal <- colSums(n)
+    # sdat <- summary(ntotal)   
+    # summStr <- paste(names(sdat), format(sdat, digits = 2), collapse = "; ")
+    # op <- par(mar = c(7,4,4,2) + 0.1, cex = 0.5)
+    # pdf(paste(npath,'.pdf', sep=''), onefile =FALSE)
+    # plot(hist(ntotal), xlab = 'nReads/cell', main = paste('cut-off', y, 'UMI'), sub = summStr, col="#d74a4a") # ;     par(op)
+    # dev.off()
 
-    # export round hist and stats 
-    rtotal <- colSums(r)
-    sdat <- summary(rtotal)   
-    summStr <- paste(names(sdat), format(sdat, digits = 2), collapse = "; ")
-    op <- par(mar = c(7,4,4,2) + 0.1, cex = 0.5)
-    pdf(paste(rpath,'.pdf', sep=''), onefile =FALSE)
-    plot(hist(rtotal), xlab = 'nReads/cell', main = paste('cut-off', y, 'UMI'), sub = summStr, col="#56b453") # ;     par(op)
-    dev.off()
+    # # export round hist and stats 
+    # rtotal <- colSums(r)
+    # sdat <- summary(rtotal)   
+    # summStr <- paste(names(sdat), format(sdat, digits = 2), collapse = "; ")
+    # op <- par(mar = c(7,4,4,2) + 0.1, cex = 0.5)
+    # pdf(paste(rpath,'.pdf', sep=''), onefile =FALSE)
+    # plot(hist(rtotal), xlab = 'nReads/cell', main = paste('cut-off', y, 'UMI'), sub = summStr, col="#56b453") # ;     par(op)
+    # dev.off()
 
 }
 
