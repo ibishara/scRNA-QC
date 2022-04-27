@@ -39,10 +39,11 @@ path.list <- path.list[1:2]
 
 foo <- function(var1, var2, ncells, nGenes, out){
 
-# var1 <- "reads_downsample/floor/reads_down_2.0.txt"
-# var2 <- 'Celltype'
+# var1 <- "genes_downsample/binary/genes_down_0.2.txt"
+# var2 <- 'Lineage'
 # ncells <- 400
 # nGenes <- 25
+# out <- 'dist'
 
         if(substr(var1, 18, 20) == 'bin'){ output.dir <- 'model_performance_genes_binary_without_normal_pdf/'  
                 method <- 'binary'
@@ -60,8 +61,8 @@ foo <- function(var1, var2, ncells, nGenes, out){
         print(noquote(paste('processing', var1)))
         # Counts/genes downsampled from HQ FELINE C1 data
         counts <- as.data.frame(fread( var1, sep='\t')) # downsamples counts 
-        rownames(counts) <- counts$V1
-        counts$V1 <- NULL
+        rownames(counts) <- counts[,1]
+        counts[,1] <- NULL
         if(var2 == 'Lineage') { markers <- lineage.markers 
         } else if( var2 == 'Celltype') { markers <- celltype.markers }
 
@@ -113,7 +114,8 @@ foo <- function(var1, var2, ncells, nGenes, out){
         # total ditribution 
         dist <- c(total)
         
-        # out <- list(summ, dist)
+        if (out == 'dist'){out <- dist
+        } else {out <- summ}
 
         ## total in binary represents number of genes. total in non-binary represents counts. add if statement to get number of genes. 
         print(noquote('Generating plots'))
@@ -131,10 +133,10 @@ numCores <- detectCores()
 numCores
 
 # Summary
-summ.lineage <- mclapply(path.list, FUN = foo, var2 = 'Lineage', ncells = 400, nGenes = 25, out = summ, mc.cores= numCores)
+summ.lineage <- mclapply(path.list, FUN = foo, var2 = 'Lineage', ncells = 400, nGenes = 25, out = 'summ', mc.cores= numCores) # out = 'summ' (Default) 
 summ.lineage <- do.call(rbind, summ.lineage)
 
-summ.celltype <- mclapply(path.list, FUN = foo, var2 = 'Celltype', ncells = 400, nGenes = 25, out = summ, mc.cores= numCores)
+summ.celltype <- mclapply(path.list, FUN = foo, var2 = 'Celltype', ncells = 400, nGenes = 25, out = 'summ', mc.cores= numCores)
 summ.celltype <- do.call(rbind, summ.celltype)
 
 comb.summ <- rbind(summ.lineage, summ.celltype )
@@ -142,18 +144,18 @@ colnames(comb.summ) <- c( 'class.var', 'source', 'threshold','method', 'AUC',  '
 write.table(comb.summ, 'performance_summary_400_400cells.txt', col.names = TRUE, sep = '\t') 
 
 
-# reads/genes distribution
+# Reads/genes distribution
 condition <- str_sub(substr(path.list, 18, nchar(path.list)), -30, -5) # capture the condition of counts e.g., genes/reads and subsample threshold
 
-dist.lineage <- mclapply(path.list, FUN = foo, var2 = 'Lineage', ncells = 400, nGenes = 25, out = dist, mc.cores= numCores)
-output1 <- do.call(cbind, dist.lineage )
-names(output1) <- condition
-write.table(output1, 'lineage_distributions_by_condition.txt', col.names = TRUE, sep = '\t') 
+dist.lineage <- mclapply(path.list, FUN = foo, var2 = 'Lineage', ncells = 400, nGenes = 25, out = 'dist', mc.cores= numCores)
+dist.lineage <- do.call(cbind, dist.lineage )
+names(dist.lineage) <- condition
+write.table(dist.lineage, 'lineage_distributions_by_condition.txt', col.names = TRUE, sep = '\t') 
 
-output.vectors2 <- mclapply(path.list, FUN = foo, var2 = 'Celltype', ncells = 400, nGenes = 25, mc.cores= numCores)
-output2 <- do.call(cbind, output.vectors2)
-names(output2) <- condition
-write.table(output2, 'celltype_distributions_by_condition.txt', col.names = TRUE, sep = '\t') 
+dist.celltype <- mclapply(path.list, FUN = foo, var2 = 'Celltype', ncells = 400, nGenes = 25, out = 'dist', mc.cores= numCores)
+dist.celltype <- do.call(cbind, dist.celltype)
+names(dist.celltype) <- condition
+write.table(dist.celltype, 'celltype_distributions_by_condition.txt', col.names = TRUE, sep = '\t') 
 
 
 

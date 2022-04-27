@@ -3,6 +3,8 @@ library(data.table)
 library(dplyr)
 library(qs)
 library(Seurat)
+library(parallel)
+
 setwd('/Users/ibishara/Desktop/FELINE_C1/')
 
 # data
@@ -19,8 +21,10 @@ numCores
 # x = dataframe to be transformed 
 # y = max total counts per cell threshold
 parent <- function(x, y, fun){
+    genes <- rownames(x)
     x <- x[, which(colSums(x) > y)] # filters for cells with total counts above threshold (to be transformed)
-    x <- as.data.frame(mclapply(X = x, FUN= fun, y = y, mc.cores= numCores )) # run 2nd function to reduce the number of count per cell above threshold. iterates over columns (cells)
+    
+    x <- cbind(genes, as.data.frame(mclapply(X = x, FUN= fun, y = y, mc.cores= numCores ))) # run 2nd function to reduce the number of count per cell above threshold. iterates over columns (cells)
 
     return(x)
 }
@@ -64,13 +68,13 @@ for (i in threshold){
     # npath <- paste('downsample/reads_downsample/nofloor/reads_down_', format(y/1000, nsmall=1), sep='')
     # rpath <- paste('downsample/reads_downsample/round/reads_down_', format(y/1000, nsmall=1), sep='')
 
-    fwrite(f, paste(fpath, '.txt', sep=''), sep='\t', nThread = 16, row.names = TRUE)
+    fwrite(f, paste(fpath, '.txt', sep=''), sep='\t', nThread = numCores, row.names = TRUE)
     # fwrite(n, paste(npath, '.txt', sep=''), sep='\t', nThread = 16, row.names = TRUE) 
     # fwrite(r, paste(rpath, '.txt', sep=''), sep='\t', nThread = 16, row.names = TRUE) 
 
 
     # export floor hist and stats 
-    ftotal <- colSums(f)
+    ftotal <- colSums(f[-1])
     sdat <- summary(ftotal)   
     summStr <- paste(names(sdat), format(sdat, digits = 2), collapse = "; ")
     op <- par(mar = c(7,4,4,2) + 0.1, cex = 0.5)

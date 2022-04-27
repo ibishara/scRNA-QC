@@ -3,6 +3,8 @@ library(data.table)
 library(dplyr)
 library(qs)
 library(Seurat)
+library(parallel)
+
 setwd('/Users/ibishara/Desktop/FELINE_C1/')
 
 # data
@@ -54,8 +56,8 @@ for (i in threshold){
     bpath <- paste('downsample/genes_downsample/binary/genes_down_', format(y/1000, nsmall=1), sep='')
     npath <- paste('downsample/genes_downsample/non-binary/genes_down_', format(y/1000, nsmall=1), sep='')
 
-    fwrite(b, paste(bpath, '.txt', sep=''), sep='\t', nThread = 16, row.names = TRUE)
-    fwrite(n, paste(npath, '.txt', sep=''), sep='\t', nThread = 16, row.names = TRUE) 
+    fwrite(b, paste(bpath, '.txt', sep=''), sep='\t', nThread = numCores, row.names = TRUE)
+    fwrite(n, paste(npath, '.txt', sep=''), sep='\t', nThread = numCores, row.names = TRUE) 
 
     # export binary hist and stats 
     btotal <- colSums(b)
