@@ -37,12 +37,12 @@ path.list <- path.list[1:2]
 # is.na(log)<-sapply(log, is.infinite)
 # log[is.na(log)]<-0
 
-foo <- function(var1, var2, ncells, nGenes){
+foo <- function(var1, var2, ncells, nGenes, out){
 
-var1 <- "reads_downsample/floor/reads_down_2.0.txt"
-var2 <- 'Celltype'
-ncells <- 400
-nGenes <- 25
+# var1 <- "reads_downsample/floor/reads_down_2.0.txt"
+# var2 <- 'Celltype'
+# ncells <- 400
+# nGenes <- 25
 
         if(substr(var1, 18, 20) == 'bin'){ output.dir <- 'model_performance_genes_binary_without_normal_pdf/'  
                 method <- 'binary'
@@ -69,10 +69,11 @@ nGenes <- 25
 
         seu.HQ.counts <- seu.HQ.counts[common.genes, ]
         # counts <- counts[common.genes, ] ## issue: This step reduces the number of genes hence yield worse performance/bias 
+  
 
         #prevent overlap between training and validation cells 
         meta.sub <- meta[colnames(counts) ,] # Since count table is a subset of all cells (transformed cells), this is added to only sample cells from transformed matrix
-         
+
         set.seed(100) 
         #Sample for validation from transformed data
         stTestList = splitCommon(sampTab = meta.sub, ncells = 100, dLevel = var2)  # not enough 400 cells/class to sample high read cut-off
@@ -112,7 +113,8 @@ nGenes <- 25
         # total ditribution 
         dist <- c(total)
         
-        out <- list(summ, dist)
+        # out <- list(summ, dist)
+
         ## total in binary represents number of genes. total in non-binary represents counts. add if statement to get number of genes. 
         print(noquote('Generating plots'))
         # plots 
@@ -122,30 +124,29 @@ nGenes <- 25
                 plot(plot_attr(classRes = classRes_val_all, sampTab=stTest, nrand=50, dLevel=var2, sid="Cell"))
                 plot(plot_metrics(tm_heldoutassessment))
         dev.off()
-        return(summ)  # returns summary and total 
+        return(out)  # returns summary and total 
 }
 
 numCores <- detectCores()
 numCores
-# out
- # output.list <- lapply(path.list, FUN = foo, var2 = 'Lineage', ncells = 400, nGenes = 25)
 
-output.list <- mclapply(path.list, FUN = foo, var2 = 'Lineage', ncells = 400, nGenes = 25, mc.cores= numCores)
-summ.lineage <- do.call(rbind, output.list[1])
-# output1 <- 
-output.list <- mclapply(path.list, FUN = foo, var2 = 'Celltype', ncells = 400, nGenes = 25, mc.cores= numCores)
-summ.celltype <- do.call(rbind, output.list[1])
+# Summary
+summ.lineage <- mclapply(path.list, FUN = foo, var2 = 'Lineage', ncells = 400, nGenes = 25, out = summ, mc.cores= numCores)
+summ.lineage <- do.call(rbind, summ.lineage)
+
+summ.celltype <- mclapply(path.list, FUN = foo, var2 = 'Celltype', ncells = 400, nGenes = 25, out = summ, mc.cores= numCores)
+summ.celltype <- do.call(rbind, summ.celltype)
+
 comb.summ <- rbind(summ.lineage, summ.celltype )
 colnames(comb.summ) <- c( 'class.var', 'source', 'threshold','method', 'AUC',  'nCells', 'nGenes', 'avg.UMI/genes')
 write.table(comb.summ, 'performance_summary_400_400cells.txt', col.names = TRUE, sep = '\t') 
 
 
-# dist
+# reads/genes distribution
 condition <- str_sub(substr(path.list, 18, nchar(path.list)), -30, -5) # capture the condition of counts e.g., genes/reads and subsample threshold
 
-
-output.vectors1 <- mclapply(path.list, FUN = foo, var2 = 'Lineage', ncells = 400, nGenes = 25, mc.cores= numCores)
-output1 <- do.call(cbind, output.vectors1)
+dist.lineage <- mclapply(path.list, FUN = foo, var2 = 'Lineage', ncells = 400, nGenes = 25, out = dist, mc.cores= numCores)
+output1 <- do.call(cbind, dist.lineage )
 names(output1) <- condition
 write.table(output1, 'lineage_distributions_by_condition.txt', col.names = TRUE, sep = '\t') 
 

@@ -11,6 +11,8 @@ seu_HQ <- subset(x = seu_HQ, subset = Celltype != "Normal epithelial cells")   #
 
 counts <- as.data.frame(GetAssayData(seu_HQ, assay = "RNA"))
 set.seed(100)
+numCores <- detectCores()
+numCores
 
 # functions 
 # function works on each column/cell to convert read counts to binary, remove n genes above threshold then export a binary matrix
@@ -44,8 +46,10 @@ threshold <- c(200, 400, 600, 800, 1000, 1500, 2000, 2500, 3000, 4000)
 for (i in threshold){
 
     y <- i
-    b <- as.data.frame(apply(counts, MARGIN=2, FUN=bin, y)) # binary output
-    n <- as.data.frame(apply(counts, MARGIN=2, FUN=nonbin, y)) # normal output
+    b <- as.data.frame(mclapply(counts, FUN = bin, y, mc.cores= numCores)) # binary output
+    rownames(b) <- rownames(counts)
+    n <- as.data.frame(mclapply(counts, FUN = nonbin, y, mc.cores= numCores)) # normal output
+    rownames(n) <- rownames(counts)
 
     bpath <- paste('downsample/genes_downsample/binary/genes_down_', format(y/1000, nsmall=1), sep='')
     npath <- paste('downsample/genes_downsample/non-binary/genes_down_', format(y/1000, nsmall=1), sep='')

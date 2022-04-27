@@ -11,14 +11,16 @@ seu_HQ <- subset(x = seu_HQ, subset = Celltype != "Normal epithelial cells")   #
 
 counts <- as.data.frame(GetAssayData(seu_HQ, assay = "RNA"))
 set.seed(100)
+numCores <- detectCores()
+numCores
 
 # functions
 # function extract cells to be transformed ( total counts above threshold ) then hand filtered dataframe to transformation function
 # x = dataframe to be transformed 
 # y = max total counts per cell threshold
 parent <- function(x, y, fun){
-    x <- x[,which(colSums(x) > y)] # filters out cells with total counts above threshold
-    x <- as.data.frame(apply(X = x, MARGIN=2, FUN= fun, y = y )) # run 2nd function to reduce the number of count per cell above threshold. iterates over columns (cells)
+    x <- x[, which(colSums(x) > y)] # filters for cells with total counts above threshold (to be transformed)
+    x <- as.data.frame(mclapply(X = x, FUN= fun, y = y, mc.cores= numCores )) # run 2nd function to reduce the number of count per cell above threshold. iterates over columns (cells)
 
     return(x)
 }
