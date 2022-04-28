@@ -6,7 +6,6 @@
 library(Seurat)
 library(qs)
 library(singleCellNet)
-library(ggpubr)
 library(data.table)
 library(stringr)
 library(parallel)
@@ -161,46 +160,6 @@ write.table(dist.celltype, 'celltype_distributions_by_condition.txt', col.names 
 
 
 
-
-output <- read.table('performance_summary_400_400cells.txt',  sep = '\t', header = TRUE) 
-output1 <- fread( 'lineage_distributions_by_condition.txt', sep = '\t') 
-output2 <- read.table('celltype_distributions_by_condition.txt', header = TRUE, sep = '\t') 
-
-
-
-output <- as.data.frame(output)
-
-pdf('performance_summary_400_400cells.pdf')
-
-        ggplot(output[output$source == 'genes' & output$method == 'binar',], aes(as.factor(threshold), as.numeric(AUC)  )) + 
-        geom_point(aes(color = as.factor(class.var))) + 
-        ggtitle("nFeature reduction - binary") +
-        xlab("number of genes (x1000)") + ylab("AUPRC")+ labs(color='Class') 
-
-        ggplot(output[output$source == 'genes' & output$method == 'nonbi',], aes(as.factor(threshold), as.numeric(AUC)  )) + 
-        geom_point(aes(color = as.factor(class.var))) + 
-        ggtitle("nFeature reduction - non-binary") +
-        xlab("number of genes (x1000)") + ylab("AUPRC")+ labs(color='Class') 
-
-        ggplot(output[output$source == 'reads' & output$method == 'floor',], aes(as.factor(threshold), as.numeric(AUC)  )) + 
-        geom_point(aes(color = as.factor(class.var))) + 
-        ggtitle("nReads reduction - floor") +
-        xlab("number of UMI (x1000)") + ylab("AUPRC")+ labs(color='Class') 
-
-        ggplot(output[output$source == 'reads' & output$method == 'noflo',], aes(as.factor(threshold), as.numeric(AUC)  )) + 
-        geom_point(aes(color = as.factor(class.var))) + 
-        ggtitle("nReads reduction - no-floor") +
-        xlab("number of UMI (x1000)") + ylab("AUPRC")+ labs(color='Class') 
-
-        ggplot(output[output$source == 'reads' & output$method == 'round',], aes(as.factor(threshold), as.numeric(AUC)  )) + 
-        geom_point(aes(color = as.factor(class.var))) + 
-        ggtitle("nReads reduction - round") +
-        xlab("number of UMI (x1000)") + ylab("AUPRC")+ labs(color='Class') 
-
-        # ggplot()
-        # ggarrange(grobs = plot1, plot2, plot3, plot4, plot5, plot6, ncol=2, nrow=3, heights=c(200, 200, 200), widths = c(200,200), common.legend = TRUE) #common.legend = TRUE, legend="bottom")
-
-dev.off()
 
 #########################################################
 
