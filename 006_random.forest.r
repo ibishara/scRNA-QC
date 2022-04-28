@@ -1,5 +1,6 @@
 # This script trains a model on HQ cells using lineage specific genes identified via FindAllMarkers 
 # The model is then used to predict lineage annotations on LQ dataset
+# parallelization require base R to run efficiently. Radian or Jupyter are not optimal and may flood memory
 
 # packages
 library(Seurat)
@@ -11,13 +12,15 @@ library(stringr)
 library(parallel)
 
 setwd('/Users/ibishara/Desktop/FELINE_C1/')
+numCores <- detectCores()
+numCores 
 
 # data
 lineage.markers <- read.table('Annotation.lineage.markers.txt', sep = '\t' )
 celltype.markers <- read.table('Annotation.celltype.markers.txt', sep = '\t' )
 
 # High quality FELINE C1 data
-seu_HQ <- qread(file = "seu_HQ.qs", nthreads = 16)
+seu_HQ <- qread(file = "seu_HQ.qs", nthreads = numCores)
 seu_HQ <- subset(x = seu_HQ, subset = Celltype != "Normal epithelial cells")   ## Removes normal epithelial cells. Genes unique to normal epi cells are removed from analysis downstream
 meta <- seu_HQ@meta.data
 seu.HQ.counts <- GetAssayData(seu_HQ, assay = "RNA")
@@ -25,7 +28,8 @@ seu.HQ.counts <- GetAssayData(seu_HQ, assay = "RNA")
 setwd('/Users/ibishara/Desktop/FELINE_C1/downsample/')
 path.list <- list.files(path = getwd(), pattern = ".*down_.*\\.txt", recursive = TRUE) # create a list of downsampled count tables
 path.list <- path.list[ !grepl("reads_downsample/round/|reads_downsample/nofloor/", path.list) ] #temp
-path.list <- path.list[1:2]
+# path.list <- path.list[1:2]
+
 # Notes:
 # var1 <- counts/genes table path
 # var2 <- classified variable e.g. Lineage, Cell type. Has to be a column name in metadata entered as a character ""
@@ -39,11 +43,11 @@ path.list <- path.list[1:2]
 
 foo <- function(var1, var2, ncells, nGenes, out){
 
-# var1 <- "genes_downsample/binary/genes_down_0.2.txt"
+# var1 <- "genes_downsample/binary/genes_down_3.0.txt"
 # var2 <- 'Lineage'
 # ncells <- 400
 # nGenes <- 25
-# out <- 'dist'
+# out <- 'summ'
 
         if(substr(var1, 18, 20) == 'bin'){ output.dir <- 'model_performance_genes_binary_without_normal_pdf/'  
                 method <- 'binary'
@@ -54,24 +58,26 @@ foo <- function(var1, var2, ncells, nGenes, out){
         } else if(substr(var1, 18, 20) == 'nof'){ output.dir <- 'model_performance_reads_nofloor_without_normal_pdf/' 
                 method <- 'no-floor' 
         } else if(substr(var1, 18, 20) == 'rou'){ output.dir <- 'model_performance_reads_round_without_normal_pdf/' 
-        method <- 'no-floor' }
+                method <- 'no-floor' }
         
         dir.create(output.dir )
         condition <- str_sub(var1, -18, -5) # capture the condition of counts e.g., genes/reads and subsample threshold
         print(noquote(paste('processing', var1)))
         # Counts/genes downsampled from HQ FELINE C1 data
-        counts <- as.data.frame(fread( var1, sep='\t')) # downsamples counts 
-        rownames(counts) <- counts[,1]
-        counts[,1] <- NULL
+        counts <- as.data.frame(fread( var1, sep='\t')) # load downsamples counts / genes 
+        # find gene symbol columns, set as rownames, delete column and any previous columns
+        for(i in 1:10){   if (!is.numeric(counts[,i]) ) {
+                rownames(counts) <- counts[,i]
+                counts <- counts[-(1:i)]
+        }}
+
         if(var2 == 'Lineage') { markers <- lineage.markers 
         } else if( var2 == 'Celltype') { markers <- celltype.markers }
 
         common.genes <- intersect(intersect(rownames(seu.HQ.counts), markers$gene), rownames(counts))
-
         seu.HQ.counts <- seu.HQ.counts[common.genes, ]
         # counts <- counts[common.genes, ] ## issue: This step reduces the number of genes hence yield worse performance/bias 
   
-
         #prevent overlap between training and validation cells 
         meta.sub <- meta[colnames(counts) ,] # Since count table is a subset of all cells (transformed cells), this is added to only sample cells from transformed matrix
 
@@ -95,16 +101,13 @@ foo <- function(var1, var2, ncells, nGenes, out){
 
 
         classRes_val_all = scn_predict(cnProc=class_info[['cnProc']], expDat=expTest, nrand = 50)  # number of training and validation cells must be equal. genes in model must be in validation set. | issue: some dropped genes lead to error
-
         tm_heldoutassessment = assess_comm(ct_scores = classRes_val_all, stTrain = stTrain, stQuery = stTest, 
                                         dLevelSID = "Cell", classTrain = var2, classQuery = var2, nRand = 50)
 
         table_type <- str_sub(condition, -15, -10)
         if(table_type == 'genes' & max(counts) > 1){ counts[counts > 0] <- 1 } # convert non-binary gene tables to binary to count num genes
         total <- as.numeric(colSums(counts))
-
         AUC <- tm_heldoutassessment$AUPRC_w
-
         threshold <- str_sub(condition, -3, -1)
         avg.reads <- mean(total)
         method <- substr(output.dir, 25, 29)
@@ -129,8 +132,6 @@ foo <- function(var1, var2, ncells, nGenes, out){
         return(out)  # returns summary and total 
 }
 
-numCores <- detectCores()
-numCores
 
 # Summary
 summ.lineage <- mclapply(path.list, FUN = foo, var2 = 'Lineage', ncells = 400, nGenes = 25, out = 'summ', mc.cores= numCores) # out = 'summ' (Default) 
@@ -149,12 +150,12 @@ condition <- str_sub(substr(path.list, 18, nchar(path.list)), -30, -5) # capture
 
 dist.lineage <- mclapply(path.list, FUN = foo, var2 = 'Lineage', ncells = 400, nGenes = 25, out = 'dist', mc.cores= numCores)
 dist.lineage <- do.call(cbind, dist.lineage )
-names(dist.lineage) <- condition
+colnames(dist.lineage) <- condition
 write.table(dist.lineage, 'lineage_distributions_by_condition.txt', col.names = TRUE, sep = '\t') 
 
 dist.celltype <- mclapply(path.list, FUN = foo, var2 = 'Celltype', ncells = 400, nGenes = 25, out = 'dist', mc.cores= numCores)
 dist.celltype <- do.call(cbind, dist.celltype)
-names(dist.celltype) <- condition
+colnames(dist.celltype) <- condition
 write.table(dist.celltype, 'celltype_distributions_by_condition.txt', col.names = TRUE, sep = '\t') 
 
 
