@@ -62,16 +62,7 @@ nonbin = function(x, y){
 
 
 
-
-# parameters 
-
-
-# This function run trains a classifier based off method, then loop over different thresholds to produce AUC values 
-# Arguments: 
-# class <- 'Celltype' , 'Lineage'
-# method <- 'floor', 'binary', 'non-binary'
-
-
+# This function trains a classifier based off 'method', then loop over different thresholds to produce AUC values 
 # Arguments: 
 # class <- 'Celltype' , 'Lineage'
 # method <- 'floor', 'binary', 'non-binary'
@@ -83,7 +74,8 @@ RF_run <- function (class, method) {
     # method <- 'floor' # diagnostic
     # i <- 2000 # diagnostic 
     # Create export directories 
-    output.dir <- paste('SR', method, class, sep='/')
+    experiment <- 'SR'
+    output.dir <- paste(experiment, method, class, sep='/')
     dir.create(output.dir, recursive = TRUE)
     sub.dir.perf <- paste(output.dir, '/model_performance', sep='')
     dir.create(sub.dir.perf)
@@ -150,7 +142,6 @@ RF_run <- function (class, method) {
             rownames(transformed) <- genes
             total <- total.reads
 
-  
         } else if (method == 'binary'){
             table_type <- 'genes'
             # Transform genes tables 
@@ -231,7 +222,7 @@ RF_run <- function (class, method) {
 
     print(noquote('Generating summary table'))
     colnames(summ.out) <- c( 'class', 'source', 'threshold','method', 'AUC_pROC', 'VnCells', 'Avg.Reads', 'Avg.Genes')
-    write.table(summ.out, paste(getwd() , '/SR_Performance_summary_', method, '_', class, '.txt' , sep=''), col.names = TRUE, sep = '\t') 
+    write.table(summ.out, paste(getwd() , '/', experiment, '_Performance_summary_', method, '_', class, '.txt' , sep=''), col.names = TRUE, sep = '\t') 
     # # export the reads and genes ditribution post-transformation at each threshold 
     # print(noquote('Generating distribution tables'))
     # write.table(dist.reads, paste(getwd() , '/SCN_reads_distribution_', method, '.txt' , sep=''), col.names = TRUE, sep = '\t') # Lineage and celltype outputs are identical. They're re-exported for validation only. 
@@ -255,7 +246,7 @@ RF_run('Lineage', 'binary')
 RF_run('Celltype', 'binary')
 
 
-
+# plot ROC curves 
 # rs <- ROC[['rocs']]
 # plot.roc(rs[[1]])
 # sapply(2:length(rs),function(i) {
@@ -264,11 +255,3 @@ RF_run('Celltype', 'binary')
 #     paste("Crude estimationAUC=", sep=""))
 #  })
 
-
-
-
-
-# for ( i in 1:28){
-# print(rs[[i]]$thresholds)
-
-# }
