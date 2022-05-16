@@ -48,34 +48,36 @@ meta_HQ_sub <- left_join(meta_HQ_sub, meta.data[, c('Cell', 'hpca')])
 rownames(meta_HQ_sub) <- meta_HQ_sub$Cell
 
 
-# # initially, hpca labels are used for lineage annotations 
-# meta_HQ_sub[["Lineage"]] <- meta_HQ_sub$Celltype
-# meta_HQ_sub <- meta_HQ_sub %>% mutate( Lineage = case_when(
-#     meta_HQ_sub[["hpca"]] == "Epithelial_cells"  ~ 'Epithelial_cells',
-#     meta_HQ_sub[["hpca"]] == "Fibroblasts"  ~ 'Mesenchymal_cells',
-#     meta_HQ_sub[["hpca"]] == "Smooth_muscle_cells"  ~ 'Mesenchymal_cells',
-#     meta_HQ_sub[["hpca"]] == "Endothelial_cells"  ~ 'Mesenchymal_cells',
-#     meta_HQ_sub[["hpca"]] == "Chondrocytes"  ~ 'Mesenchymal_cells',
-#     meta_HQ_sub[["hpca"]] == "Osteoblasts"  ~ 'Mesenchymal_cells',
-#     meta_HQ_sub[["hpca"]] == "T_cells"  ~ 'Hematopoeitic_cells',
-#     meta_HQ_sub[["hpca"]] == "B_cell"  ~ 'Hematopoeitic_cells',
-#     meta_HQ_sub[["hpca"]] == "Macrophage"  ~ 'Hematopoeitic_cells',
-#     meta_HQ_sub[["hpca"]] == "Monocyte"  ~ 'Hematopoeitic_cells',
-#     meta_HQ_sub[["hpca"]] == "NK_cell"  ~ 'Hematopoeitic_cells',
-#     meta_HQ_sub[["hpca"]] == "Neutrophils"  ~ 'Hematopoeitic_cells',
-#     meta_HQ_sub[["hpca"]] == "Platelets"  ~ 'Hematopoeitic_cells',
-# # overwrite HQ cells according to JF annotations | Only HQ cells have "Celltype" annotaions
-#     meta_HQ_sub[["Celltype"]] == "Cancer cells"  ~ 'Epithelial_cells',
-#     meta_HQ_sub[["Celltype"]] == "Normal epithelial cells"  ~ 'Epithelial_cells',
-#     meta_HQ_sub[["Celltype"]] == "Adipocytes"  ~ 'Mesenchymal_cells',
-#     meta_HQ_sub[["Celltype"]] == "Fibroblasts"  ~ 'Mesenchymal_cells',
-#     meta_HQ_sub[["Celltype"]] == "Endothelial cells"  ~ 'Mesenchymal_cells',
-#     meta_HQ_sub[["Celltype"]] == "Pericytes"  ~ 'Mesenchymal_cells',
-#     meta_HQ_sub[["Celltype"]] == "Macrophages"  ~ 'Hematopoeitic_cells',
-#     meta_HQ_sub[["Celltype"]] == "T cells"  ~ 'Hematopoeitic_cells',
-#     meta_HQ_sub[["Celltype"]] == "B cells"  ~ 'Hematopoeitic_cells'
-# ))
-
+# initially, hpca labels are used for lineage annotations 
+meta_HQ_sub[["Lineage"]] <- meta_HQ_sub$Celltype
+meta_HQ_sub <- meta_HQ_sub %>% mutate( Lineage = case_when(
+    # meta_HQ_sub[["hpca"]] == "Epithelial_cells"  ~ 'Epithelial_cells',
+    # meta_HQ_sub[["hpca"]] == "Fibroblasts"  ~ 'Mesenchymal_cells',
+    # meta_HQ_sub[["hpca"]] == "Smooth_muscle_cells"  ~ 'Mesenchymal_cells',
+    # meta_HQ_sub[["hpca"]] == "Endothelial_cells"  ~ 'Mesenchymal_cells',
+    # meta_HQ_sub[["hpca"]] == "Chondrocytes"  ~ 'Mesenchymal_cells',
+    # meta_HQ_sub[["hpca"]] == "Osteoblasts"  ~ 'Mesenchymal_cells',
+    # meta_HQ_sub[["hpca"]] == "T_cells"  ~ 'Hematopoeitic_cells',
+    # meta_HQ_sub[["hpca"]] == "B_cell"  ~ 'Hematopoeitic_cells',
+    # meta_HQ_sub[["hpca"]] == "Macrophage"  ~ 'Hematopoeitic_cells',
+    # meta_HQ_sub[["hpca"]] == "Monocyte"  ~ 'Hematopoeitic_cells',
+    # meta_HQ_sub[["hpca"]] == "NK_cell"  ~ 'Hematopoeitic_cells',
+    # meta_HQ_sub[["hpca"]] == "Neutrophils"  ~ 'Hematopoeitic_cells',
+    # meta_HQ_sub[["hpca"]] == "Platelets"  ~ 'Hematopoeitic_cells',
+# overwrite HQ cells according to JF annotations | Only HQ cells have "Celltype" annotaions
+    meta_HQ_sub[["Celltype"]] == "Cancer cells"  ~ 'Epithelial_cells',
+    meta_HQ_sub[["Celltype"]] == "Normal epithelial cells"  ~ 'Epithelial_cells',
+    meta_HQ_sub[["Celltype"]] == "Adipocytes"  ~ 'Mesenchymal_cells',
+    meta_HQ_sub[["Celltype"]] == "Fibroblasts"  ~ 'Mesenchymal_cells',
+    meta_HQ_sub[["Celltype"]] == "Endothelial cells"  ~ 'Mesenchymal_cells',
+    meta_HQ_sub[["Celltype"]] == "Pericytes"  ~ 'Mesenchymal_cells',
+    meta_HQ_sub[["Celltype"]] == "Macrophages"  ~ 'Hematopoeitic_cells',
+    meta_HQ_sub[["Celltype"]] == "T cells"  ~ 'Hematopoeitic_cells',
+    meta_HQ_sub[["Celltype"]] == "B cells"  ~ 'Hematopoeitic_cells'
+))
+# test: 
+# unique(meta_HQ_sub[ meta_HQ_sub$Lineage == 'Mesenchymal_cells', ]$Celltype)
+# unique(meta_HQ_sub[ meta_HQ_sub$Lineage == 'Epithelial_cells', ]$Celltype)
 
 
 
@@ -93,9 +95,11 @@ HQ_count_batches_merged <- as.data.frame(do.call(cbind, count.filter.list))  #jo
 HQ_count_batches_merged <- HQ_count_batches_merged[,!duplicated(colnames(HQ_count_batches_merged))] # remove duplicate cell id
 HQ_count_batches_merged <- HQ_count_batches_merged[!duplicated(HQ_count_batches_merged$"Gene Symbol"),] # remove duplicate genes
 HQ_count_batches_merged <- HQ_count_batches_merged[HQ_count_batches_merged$'Gene Symbol' != '' ,] # remove null genes
+rownames(HQ_count_batches_merged) <- HQ_count_batches_merged$'Gene Symbol'
+HQ_count_batches_merged$'Gene Symbol' <- NULL
 
 # ordering counts and meta cells alphabetically 
-temp <- HQ_count_batches_merged[,-1]
+temp <- HQ_count_batches_merged
 sorted_counts <- temp[, order(colnames(temp))] 
 sorted_meta <- meta_HQ_sub[order(meta_HQ_sub$Cell) ,]
 
@@ -118,7 +122,6 @@ qsave(seu_HQ, file="seu_HQ.qs")
 
 
 ## LQ metadata subsampling ##
-
 meta_LQ <- meta.data[ !meta.data$Cell %in% meta_HQ$Cell, ] # remove HQ cells 
 meta_LQ_sub <- meta_LQ[sample(nrow(meta_LQ), sample.ncell), ] #
 meta_LQ_sub$V1 <- NULL
@@ -145,7 +148,7 @@ sorted_counts[sorted_counts > 0] <- 1
 sorted_meta$nFeature_RNA = colSums(sorted_counts)  # corrected nFeature_RNA
 meta_LQ_sub <- sorted_meta
 
-
+# next chunk could be here or in "plots.ipynb"
 # # Lineage annotations based off hpca annotations 
 # meta_LQ_sub[["Lineage"]] <- meta_LQ_sub$hpca
 # meta_LQ_sub <- meta_LQ_sub %>% mutate( Lineage = case_when(
