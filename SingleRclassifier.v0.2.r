@@ -6,11 +6,13 @@
 # packages
 library(Seurat)
 library(qs)
-library(singleCellNet)
 library(data.table)
-library(stringr)
 library(parallel)
+library(SingleR)
+library(singleCellNet)
 library(pROC)
+library(BiocParallel)
+library(multiROC)
 
 setwd('/Users/ibishara/Desktop/FELINE_C1/')
 numCores <- detectCores()
@@ -22,7 +24,7 @@ celltype.markers <- read.table('Annotation.celltype.markers.txt', sep = '\t' )
 
 # High quality FELINE C1 data
 seu_HQ <- qread(file = "seu_HQ.qs", nthreads = numCores)
-seu_HQ <- subset(x = seu_HQ, subset = Celltype != "Normal epithelial cells")   ## Removes normal epithelial cells. Genes unique to normal epi cells are removed from analysis downstream
+seu_HQ <- subset(seu_HQ, subset = Celltype != "Normal epithelial cells")   ## Removes normal epithelial cells. Genes unique to normal epi cells are removed from analysis downstream
 seu_HQ <- subset(seu_HQ, subset = nCount_RNA < 15000 ) # filter out cells with > 15k reads 
 meta <- seu_HQ@meta.data
 seu.HQ.counts <- GetAssayData(seu_HQ, assay = "RNA")
@@ -42,14 +44,14 @@ red.reads <- function(x, y){
 # Arguments: 
 # class <- 'Celltype' , 'Lineage'
 # method <- 'floor', 'binary', 'non-binary', 'poisson'
-RF_run <- function (class, method) {
+SR_run <- function (class, method) {
 
     # class <- 'Celltype' # diagnostic 
     # method <- 'poisson' # diagnostic
-    # i <- 1500 # diagnostic 
+    # i <- 800 # diagnostic 
 
     # Create export directories 
-    experiment <- 'SCN'
+    experiment <- 'SR'
     output.dir <- paste(experiment, method, class, sep='/')
     dir.create(output.dir, recursive = TRUE)
     sub.dir.perf <- paste(output.dir, '/model_performance', sep='')
@@ -65,18 +67,6 @@ RF_run <- function (class, method) {
         }
     
     set.seed(100)
-
-    # # split training set
-    # stTrainList = splitCommon(sampTab = meta, ncells = Tncells, dLevel = class) # At certain thresholds, there's not enough remaining cells for training 
-    # stTrain = stTrainList[[1]]
-    # expTrain.full = seu.HQ.counts[, rownames(stTrain)]
-    # expTrain <- expTrain.full[common.genes, ]
-
-    # # Validation on transformed data
-    # stTestList = splitCommon(sampTab = stTrainList[[2]], ncells = Vncells, dLevel = class)  
-    # stTest = stTestList[[1]]
-    # expTest = seu.HQ.counts[ , rownames(stTest)]
-    # control.test <- expTest[common.genes, ] # untransformed reads as a test control
     
     # Split 50 / 50 
     stList = splitCommon(sampTab = meta, ncells = Tncells, dLevel = class) # At certain thresholds, there's not enough remaining cells for training 
@@ -91,21 +81,26 @@ RF_run <- function (class, method) {
     control.test <- expTest[common.genes, ] # untransformed reads as a test control\
 
 
+
     if (method == 'binary'){
         expTrain[expTrain > 0] <- 1 # transform training counts to binary
         expTest[expTest > 0] <- 1 # transform testing counts to binary
     }
 
     # model training
-    system.time(class_info <- scn_train(stTrain = stTrain, expTrain = expTrain, 
-                            nTopGenes = nGenes, nRand = 50, nTrees = 1000, nTopGenePairs = nGenes*2, 
-                            dLevel = class, colName_samp = "Cell"))
+    if ( class == 'Lineage'){ 
+        system.time(class_info <- trainSingleR(expTrain, stTrain$Lineage))
+    } else if ( class == 'Celltype') {
+        system.time(class_info <- trainSingleR(expTrain, stTrain$Celltype))
+    }
+
+
     # Save model 
     qsave(class_info, file= paste(output.dir, '/Trained_model_for_', class, '_', method,'.qs', sep='' ), nthreads= numCores)
 
     # pre-transformation Diagnostics
-    tot_counts_train <- unlist(mclapply(as.data.frame(expTrain), function (x) sum(x), mc.cores= numCores ))
-    tot_genes_train <- unlist(mclapply(as.data.frame(expTrain), function (x) sum(x > 0), mc.cores= numCores ))
+    tot_counts_train <- unlist(mclapply(as.data.frame(expTrain.full), function (x) sum(x), mc.cores= numCores ))
+    tot_genes_train <- unlist(mclapply(as.data.frame(expTrain.full), function (x) sum(x > 0), mc.cores= numCores ))
     tot_counts_test <- unlist(mclapply(as.data.frame(expTest), function (x) sum(x), mc.cores= numCores ))
     tot_genes_test <- unlist(mclapply(as.data.frame(expTest), function (x) sum(x > 0), mc.cores= numCores ))
     pdf('SCN/Train_Test_sets_corr_plot.pdf')
@@ -147,6 +142,7 @@ RF_run <- function (class, method) {
 
         plot(total.reads, total.genes, main= paste('Testing set, n =', length(total.reads))) # temp
 
+
   
         } else if (method == 'binary'){
             table_type <- 'genes'
@@ -181,37 +177,16 @@ RF_run <- function (class, method) {
     dev.off()
 
     expTest <- as.data.frame(transformed[common.genes, ]) 
-    # SCN prediction
-    classRes_val_all = scn_predict(cnProc=class_info[['cnProc']], expDat = expTest, nrand = 0)  # Removed rand # number of training and validation cells must be equal. genes in model must be in validation set. | issue: some dropped genes lead to error
-    # SCN model assessment 
-    tm_heldoutassessment = assess_comm(ct_scores = classRes_val_all, stTrain = stTrain, stQuery = stTest, 
-                                    dLevelSID = "Cell", classTrain = class, classQuery = class, nRand = 0)
-    AUC.SCN <- tm_heldoutassessment$AUPRC_w # get AUC value
 
+    # SingleR prediction
+    classRes_val_all = classifySingleR(expTest, class_info, fine.tune = FALSE, prune = FALSE, BPPARAM = MulticoreParam(numCores)) 
 
-    # Alternative model assessment (pROC package)
-    ## Remove Rand 
-    classRes_val_all <- as.data.frame(classRes_val_all)
-classRes_val_all <- classRes_val_all[!rownames(classRes_val_all) %in% 'rand' ,] # remove 'rand' category
-    classRes_val_labels <- unlist(apply(classRes_val_all, MARGIN = 2, function(x) { x <- names(which(x == max(x))) })) # generate labels based off highest probabilities (excluding Random)
-    classRes_val_labels <- classRes_val_labels[order(names(classRes_val_labels))] # order predicted labels alphabetically by cell 
-    classRes_val_labels <- classRes_val_labels[rownames(stTest)] ## Almost randomly, a cell or two are added with a digit after bar code, this step is to remove these extra cells until debugged
-  #  classRes_val_labels <- c(classRes_val_labels, classRes_val_labels[(length(classRes_val_labels)-49) : length(classRes_val_labels)] )
-    
-    
-    stTest <- stTest[order(rownames(stTest)),  ]    # order true labels alphabetically by cell
-    test <- stTest[, class]
-  #  test <- c(stTest[, class], rep('rand', 50))
+    # SingleR model evaluation 
+    stTest <- stTest[ order(rownames(stTest)), ]    # order true labels alphabetically by cell
+    classRes_val_all <- classRes_val_all[order(rownames(classRes_val_all)),] # order predicted labels alphabetically by cell 
+    AUC.pROC <- multiclass.roc(factor(stTest[, class], ordered = TRUE), factor(classRes_val_all$labels, ordered = TRUE))$auc[1]
 
-    AUC.pROC <- multiclass.roc(factor(test, ordered = TRUE), factor(classRes_val_labels, ordered = TRUE))$auc[1]
-
-
-    print(paste('SCN-AUC =', AUC.SCN))
     print(paste('pROC-AUC =', AUC.pROC))
-    # changed from : 
-    #     AUC.pROC <- multiclass.roc(stTest[, class], factor(classRes_val_labels[1,], ordered = TRUE))$auc[1]
-    #     }
-    # AUC.pROC <- multiclass.roc(stTest[, class], factor(classRes_val_labels, ordered = TRUE))$auc[1]
 
     ## Plot performance metrics 
     print(noquote('Generating plots'))
@@ -219,9 +194,6 @@ classRes_val_all <- classRes_val_all[!rownames(classRes_val_all) %in% 'rand' ,] 
     pdf(paste(sub.dir.perf, '/', method, '_', class, '_', threshold, '.pdf', sep = ''))
             hist(total.reads, main = paste(table_type, '_', method, '_', class, '_', threshold, sep = ''))         
             hist(total.genes, main = paste(table_type, '_', method, '_', class, '_', threshold, sep = ''))
-            plot(plot_PRs(tm_heldoutassessment))
-            # plot(plot_attr(classRes = classRes_val_all, sampTab=stTest, nrand=50, dLevel=class, sid="Cell"))
-            plot(plot_metrics(tm_heldoutassessment))
             if (method == 'floor' | method == 'non-binary') {
                 coeff <- round(cor(total.reads, total.genes), 2)
                 plot(log10(total.reads), log10(total.genes), pch = 20, cex = 0.2,  
@@ -232,7 +204,7 @@ classRes_val_all <- classRes_val_all[!rownames(classRes_val_all) %in% 'rand' ,] 
     avg.reads <- mean(total.reads)
     avg.genes <- mean(total.genes)
 
-    summ <- c(class, table_type, threshold, method, AUC.SCN, AUC.pROC, Vncells, nGenes, round(avg.reads), round(avg.genes)) 
+    summ <- c(class, table_type, threshold, method, AUC.pROC, Vncells, round(avg.reads), round(avg.genes)) 
     summ.out <- rbind(summ.out, summ)
 
     names(total.reads) <- NULL
@@ -245,7 +217,7 @@ classRes_val_all <- classRes_val_all[!rownames(classRes_val_all) %in% 'rand' ,] 
     } # end of loop 
 
     print(noquote('Generating summary table'))
-    colnames(summ.out) <- c( 'class', 'source', 'threshold','method', 'AUC_SCN', 'AUC_pROC', 'VnCells', 'nTopGenes', 'Avg.Reads', 'Avg.Genes')
+    colnames(summ.out) <- c( 'class', 'source', 'threshold','method', 'AUC_pROC', 'VnCells', 'Avg.Reads', 'Avg.Genes')
     write.table(summ.out, paste(getwd() , '/', experiment, '_Performance_summary_', method, '_', class, '.txt' , sep=''), col.names = TRUE, sep = '\t') 
     # export the reads and genes ditribution at each threshold 
     print(noquote('Generating distribution tables'))
@@ -260,13 +232,16 @@ Vncells <- 400 # nCells/class for testing dataset
 threshold_list <- c(200, 400, 600, 800, 1000, 1500, 2000, 3000, 4000) # thresholds to be tested
 
 
-RF_run('Lineage', 'poisson')
-RF_run('Celltype', 'poisson')
+SR_run('Lineage', 'poisson')
+SR_run('Celltype', 'poisson')
 
-RF_run('Lineage', 'non-binary')
-RF_run('Celltype', 'non-binary')
 
-RF_run('Lineage', 'binary')
-RF_run('Celltype', 'binary')
+
+
+SR_run('Lineage', 'non-binary')
+SR_run('Celltype', 'non-binary')
+
+SR_run('Lineage', 'binary')
+SR_run('Celltype', 'binary')
 
 
