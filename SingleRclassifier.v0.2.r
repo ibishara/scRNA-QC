@@ -74,11 +74,10 @@ SR_run <- function (class, method) {
     stTrain = stSub[sample(nrow(stSub), round(nrow(stSub)/2)), ]
     stTest = stSub[! rownames(stSub) %in% rownames(stTrain) ,]
 
-    expTrain.full = seu.HQ.counts[, rownames(stTrain)]
-    expTrain <- expTrain.full[common.genes, ]
+    expTrain = seu.HQ.counts[, rownames(stTrain)] # train on all genes 
 
     expTest = seu.HQ.counts[ , rownames(stTest)]
-    control.test <- expTest[common.genes, ] # untransformed reads as a test control\
+    control.test <- expTest # untransformed reads as a test control\
 
 
 
@@ -176,7 +175,7 @@ SR_run <- function (class, method) {
     plot(hist(total), xlab = paste('n', table_type, '/cell', sep='') , main = paste('threshold', i, table_type), sub = summStr, col="#1e72d2") 
     dev.off()
 
-    expTest <- as.data.frame(transformed[common.genes, ]) 
+    expTest <- as.data.frame(transformed) # run on all genes 
 
     # SingleR prediction
     classRes_val_all = classifySingleR(expTest, class_info, fine.tune = FALSE, prune = FALSE, BPPARAM = MulticoreParam(numCores)) 
