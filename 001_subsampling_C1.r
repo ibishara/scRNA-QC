@@ -40,30 +40,21 @@ meta_HQ <- left_join(ref1, ref2[, c('Cell','Celltype')], by = 'Cell' ) # combine
 set.seed(100)
 sample.ncell <- 35000 # number of cells to sample for HQ and LQ
 
-## HQ metadata subsampling ##
+
+###############################
+### HQ metadata subsampling ###
+###############################
+
 meta_HQ_sub <- meta_HQ[sample(nrow(meta_HQ), sample.ncell), ] # subsample 20% cells 
 
-# Attach hpca annotation for HQ 
-meta_HQ_sub <- left_join(meta_HQ_sub, meta.data[, c('Cell', 'hpca')])
-rownames(meta_HQ_sub) <- meta_HQ_sub$Cell
+# # Attach hpca annotation for HQ 
+# meta_HQ_sub <- left_join(meta_HQ_sub, meta.data[, c('Cell', 'hpca')])
+# rownames(meta_HQ_sub) <- meta_HQ_sub$Cell
 
 
 # initially, hpca labels are used for lineage annotations 
 meta_HQ_sub[["Lineage"]] <- meta_HQ_sub$Celltype
 meta_HQ_sub <- meta_HQ_sub %>% mutate( Lineage = case_when(
-    # meta_HQ_sub[["hpca"]] == "Epithelial_cells"  ~ 'Epithelial_cells',
-    # meta_HQ_sub[["hpca"]] == "Fibroblasts"  ~ 'Mesenchymal_cells',
-    # meta_HQ_sub[["hpca"]] == "Smooth_muscle_cells"  ~ 'Mesenchymal_cells',
-    # meta_HQ_sub[["hpca"]] == "Endothelial_cells"  ~ 'Mesenchymal_cells',
-    # meta_HQ_sub[["hpca"]] == "Chondrocytes"  ~ 'Mesenchymal_cells',
-    # meta_HQ_sub[["hpca"]] == "Osteoblasts"  ~ 'Mesenchymal_cells',
-    # meta_HQ_sub[["hpca"]] == "T_cells"  ~ 'Hematopoeitic_cells',
-    # meta_HQ_sub[["hpca"]] == "B_cell"  ~ 'Hematopoeitic_cells',
-    # meta_HQ_sub[["hpca"]] == "Macrophage"  ~ 'Hematopoeitic_cells',
-    # meta_HQ_sub[["hpca"]] == "Monocyte"  ~ 'Hematopoeitic_cells',
-    # meta_HQ_sub[["hpca"]] == "NK_cell"  ~ 'Hematopoeitic_cells',
-    # meta_HQ_sub[["hpca"]] == "Neutrophils"  ~ 'Hematopoeitic_cells',
-    # meta_HQ_sub[["hpca"]] == "Platelets"  ~ 'Hematopoeitic_cells',
 # overwrite HQ cells according to JF annotations | Only HQ cells have "Celltype" annotaions
     meta_HQ_sub[["Celltype"]] == "Cancer cells"  ~ 'Epithelial_cells',
     meta_HQ_sub[["Celltype"]] == "Normal epithelial cells"  ~ 'Epithelial_cells',
@@ -75,53 +66,54 @@ meta_HQ_sub <- meta_HQ_sub %>% mutate( Lineage = case_when(
     meta_HQ_sub[["Celltype"]] == "T cells"  ~ 'Hematopoeitic_cells',
     meta_HQ_sub[["Celltype"]] == "B cells"  ~ 'Hematopoeitic_cells'
 ))
-# test: 
-# unique(meta_HQ_sub[ meta_HQ_sub$Lineage == 'Mesenchymal_cells', ]$Celltype)
-# unique(meta_HQ_sub[ meta_HQ_sub$Lineage == 'Epithelial_cells', ]$Celltype)
-
-
 
 ## Subsample count table for matching cell ids ##
 ## Inefficient to run in a notebook. Run in base R or Radian
 ## creates and index of subsamples cells in metadata for each raw count table then subsample each table only for matching cells
-system.time({
+
 all.counts <- list.files(path = "/Users/ibishara/Desktop/FELINE_C1/raw/FELINE_cellranger_premRNA/", pattern = "*counts.txt", recursive = TRUE) # create a list of raw count tables from all batches
 count.filter.list <- mclapply(paste('raw/FELINE_cellranger_premRNA/', all.counts, sep=''), FUN = function(x) {
-count_sub <- fread(x, sep='auto', select= c("Gene Symbol",  meta_HQ_sub$Cell  )) # cell ids subsampled from the metadata
-return(count_sub)  # returns warnings for every cell id NOT in each count table
+count_sub <- fread(x, sep='auto', select= c("Gene Symbol",  meta_HQ_sub$Cell )) # cell ids subsampled from the metadata
+return(count_sub)  
 }, mc.cores= numCores)
 
 HQ_count_batches_merged <- as.data.frame(do.call(cbind, count.filter.list))  #join list of tables 
 HQ_count_batches_merged <- HQ_count_batches_merged[,!duplicated(colnames(HQ_count_batches_merged))] # remove duplicate cell id
 HQ_count_batches_merged <- HQ_count_batches_merged[!duplicated(HQ_count_batches_merged$"Gene Symbol"),] # remove duplicate genes
-HQ_count_batches_merged <- HQ_count_batches_merged[HQ_count_batches_merged$'Gene Symbol' != '' ,] # remove null genes
+HQ_count_batches_merged <- HQ_count_batches_merged[HQ_count_batches_merged$'Gene Symbol' != '' ,] # remove missing genes
 rownames(HQ_count_batches_merged) <- HQ_count_batches_merged$'Gene Symbol'
 HQ_count_batches_merged$'Gene Symbol' <- NULL
 
 # ordering counts and meta cells alphabetically 
-temp <- HQ_count_batches_merged
-sorted_counts <- temp[, order(colnames(temp))] 
+sorted_counts <- HQ_count_batches_merged[, order(colnames(HQ_count_batches_merged))] 
 sorted_meta <- meta_HQ_sub[order(meta_HQ_sub$Cell) ,]
 
 sorted_meta$nCount_RNA = colSums(sorted_counts)  # corrected nCount_RNA
-sorted_counts[sorted_counts > 0] <- 1
-sorted_meta$nFeature_RNA = colSums(sorted_counts)  # corrected nFeature_RNA
+sorted_meta$nFeature_RNA = apply(sorted_counts, 2, function (x) sum(x > 0))  # corrected nFeature_RNA
+
+## Randomize patient id
+colnames(sorted_counts) <- seq(1, ncol(sorted_counts), 1)
+sorted_meta[,1] <- colnames(sorted_counts)
+
+sorted_meta$Patient <- NULL
+sorted_meta$Batch <- NULL
+
 meta_HQ_sub <- sorted_meta
 
-})
 
-fwrite(HQ_count_batches_merged, 'raw_counts_subsample_HQ.txt', sep='\t') # Export subsampled raw counts
+fwrite(sorted_counts, 'raw_counts_subsample_HQ.txt', sep='\t') # Export subsampled raw counts
 fwrite(meta_HQ_sub, 'metadata_subsample_HQ.txt', sep='\t') # Export subsampled metadata
 
 # construct HQ seurat object
-seu_HQ <- CreateSeuratObject(counts= HQ_count_batches_merged, min.features= 0, min.cells = 0, names.delim= "_", meta.data= meta_HQ_sub) 
+seu_HQ <- CreateSeuratObject(counts= sorted_counts, min.features= 0, min.cells = 0, names.delim= "_", meta.data= meta_HQ_sub) 
 qsave(seu_HQ, file="seu_HQ.qs")
 
 
 
+#################################
+#### LQ metadata subsampling ####
+#################################
 
-
-## LQ metadata subsampling ##
 meta_LQ <- meta.data[ !meta.data$Cell %in% meta_HQ$Cell, ] # remove HQ cells 
 meta_LQ_sub <- meta_LQ[sample(nrow(meta_LQ), sample.ncell), ] #
 meta_LQ_sub$V1 <- NULL
@@ -130,45 +122,49 @@ meta_LQ_sub$V1 <- NULL
 all.counts <- list.files(path = "/Users/ibishara/Desktop/FELINE_C1/raw/FELINE_cellranger_premRNA/", pattern = "*counts.txt", recursive = TRUE) # create a list of raw count tables from all batches
 count.filter.list <- mclapply(paste('raw/FELINE_cellranger_premRNA/', all.counts, sep=''), FUN = function(x) {
 count_sub <- fread(x, sep='auto', select= c("Gene Symbol",  meta_LQ_sub$Cell  )) # cell ids subsampled from the metadata
-return(count_sub)  # returns warnings for every cell id NOT in each count table
+return(count_sub) 
 }, mc.cores= numCores)
 
 LQ_count_batches_merged <- as.data.frame(do.call(cbind, count.filter.list))  #join list of tables 
 LQ_count_batches_merged <- LQ_count_batches_merged[,!duplicated(colnames(LQ_count_batches_merged))] # remove duplicate cell id
 LQ_count_batches_merged <- LQ_count_batches_merged[!duplicated(LQ_count_batches_merged$"Gene Symbol"),] # remove duplicate genes
 LQ_count_batches_merged <- LQ_count_batches_merged[LQ_count_batches_merged$'Gene Symbol' != '' ,] # remove null genes
+rownames(LQ_count_batches_merged) <- LQ_count_batches_merged$'Gene Symbol'
+LQ_count_batches_merged$'Gene Symbol' <- NULL
 
 # ordering counts and meta cells alphabetically 
-temp <- LQ_count_batches_merged[,-1]
-sorted_counts <- temp[, order(colnames(temp))] 
 sorted_meta <- meta_LQ_sub[order(meta_LQ_sub$Cell) ,]
-
 sorted_meta$nCount_RNA = colSums(sorted_counts)  # corrected nCount_RNA
-sorted_counts[sorted_counts > 0] <- 1
-sorted_meta$nFeature_RNA = colSums(sorted_counts)  # corrected nFeature_RNA
+sorted_meta$nFeature_RNA = apply(sorted_counts, 2, function (x) sum(x > 0))  # corrected nFeature_RNA
+
+
+## Randomize patient id
+sorted_meta[,1] <- colnames(sorted_counts)
+
+sorted_meta$Patient <- NULL
+sorted_meta$Batch <- NULL
+sorted_meta$Sample <- NULL
 meta_LQ_sub <- sorted_meta
 
-# next chunk could be here or in "plots.ipynb"
-# # Lineage annotations based off hpca annotations 
-# meta_LQ_sub[["Lineage"]] <- meta_LQ_sub$hpca
-# meta_LQ_sub <- meta_LQ_sub %>% mutate( Lineage = case_when(
-#         meta_LQ_sub[["hpca"]] == "Epithelial_cells"  ~ 'Epithelial_cells',
-#         meta_LQ_sub[["hpca"]] == "Fibroblasts"  ~ 'Mesenchymal_cells',
-#         meta_LQ_sub[["hpca"]] == "Smooth_muscle_cells"  ~ 'Mesenchymal_cells',
-#         meta_LQ_sub[["hpca"]] == "Endothelial_cells"  ~ 'Mesenchymal_cells',
-#         meta_LQ_sub[["hpca"]] == "Chondrocytes"  ~ 'Mesenchymal_cells',
-#         meta_LQ_sub[["hpca"]] == "Osteoblasts"  ~ 'Mesenchymal_cells',
-#         meta_LQ_sub[["hpca"]] == "T_cells"  ~ 'Hematopoeitic_cells',
-#         meta_LQ_sub[["hpca"]] == "B_cell"  ~ 'Hematopoeitic_cells',
-#         meta_LQ_sub[["hpca"]] == "Macrophage"  ~ 'Hematopoeitic_cells',
-#         meta_LQ_sub[["hpca"]] == "Monocyte"  ~ 'Hematopoeitic_cells',
-#         meta_LQ_sub[["hpca"]] == "NK_cell"  ~ 'Hematopoeitic_cells',
-#         meta_LQ_sub[["hpca"]] == "Neutrophils"  ~ 'Hematopoeitic_cells',
-#         meta_LQ_sub[["hpca"]] == "Platelets"  ~ 'Hematopoeitic_cells'
-# ))
+
+# Lineage annotations based off hpca annotations 
+meta_LQ_sub[["Lineage"]] <- meta_LQ_sub$hpca
+meta_LQ_sub <- meta_LQ_sub %>% mutate( Lineage = case_when(
+        meta_LQ_sub[["hpca"]] == "Epithelial_cells"  ~ 'Epithelial_cells',
+        meta_LQ_sub[["hpca"]] == "Fibroblasts"  ~ 'Mesenchymal_cells',
+        meta_LQ_sub[["hpca"]] == "Smooth_muscle_cells"  ~ 'Mesenchymal_cells',
+        meta_LQ_sub[["hpca"]] == "Endothelial_cells"  ~ 'Mesenchymal_cells',
+        meta_LQ_sub[["hpca"]] == "Chondrocytes"  ~ 'Mesenchymal_cells',
+        meta_LQ_sub[["hpca"]] == "Osteoblasts"  ~ 'Mesenchymal_cells',
+        meta_LQ_sub[["hpca"]] == "T_cells"  ~ 'Hematopoeitic_cells',
+        meta_LQ_sub[["hpca"]] == "B_cell"  ~ 'Hematopoeitic_cells',
+        meta_LQ_sub[["hpca"]] == "Macrophage"  ~ 'Hematopoeitic_cells',
+        meta_LQ_sub[["hpca"]] == "Monocyte"  ~ 'Hematopoeitic_cells',
+        meta_LQ_sub[["hpca"]] == "NK_cell"  ~ 'Hematopoeitic_cells',
+        meta_LQ_sub[["hpca"]] == "Neutrophils"  ~ 'Hematopoeitic_cells',
+        meta_LQ_sub[["hpca"]] == "Platelets"  ~ 'Hematopoeitic_cells'
+))
 
 names(meta_LQ_sub)[names(meta_LQ_sub) == 'Percent Mitochondria'] <- 'Percent.Mitochondria' # match names in HQ metadata 
 
 fwrite(meta_LQ_sub, 'metadata_subsample_LQ.txt', sep='\t') # Export subsampled metadata
-
-

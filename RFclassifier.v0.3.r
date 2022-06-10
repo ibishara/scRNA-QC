@@ -46,7 +46,7 @@ RF_run <- function (class, method) {
 
     # class <- 'Celltype' # diagnostic 
     # method <- 'poisson' # diagnostic
-    # i <- 1500 # diagnostic 
+    # i <- 800 # diagnostic 
 
     # Create export directories 
     experiment <- 'SCN'
@@ -65,21 +65,8 @@ RF_run <- function (class, method) {
         }
     
     set.seed(100)
-
-    # # split training set
-    # stTrainList = splitCommon(sampTab = meta, ncells = Tncells, dLevel = class) # At certain thresholds, there's not enough remaining cells for training 
-    # stTrain = stTrainList[[1]]
-    # expTrain.full = seu.HQ.counts[, rownames(stTrain)]
-    # expTrain <- expTrain.full[common.genes, ]
-
-    # # Validation on transformed data
-    # stTestList = splitCommon(sampTab = stTrainList[[2]], ncells = Vncells, dLevel = class)  
-    # stTest = stTestList[[1]]
-    # expTest = seu.HQ.counts[ , rownames(stTest)]
-    # control.test <- expTest[common.genes, ] # untransformed reads as a test control
-    
     # Split 50 / 50 
-    stList = splitCommon(sampTab = meta, ncells = Tncells, dLevel = class) # At certain thresholds, there's not enough remaining cells for training 
+    stList = splitCommon(sampTab = meta, ncells = ncells, dLevel = class) # At certain thresholds, there's not enough remaining cells for training 
     stSub = stList[[1]]
     stTrain = stSub[sample(nrow(stSub), round(nrow(stSub)/2)), ]
     stTest = stSub[! rownames(stSub) %in% rownames(stTrain) ,]
@@ -184,26 +171,24 @@ RF_run <- function (class, method) {
     # SCN prediction
     classRes_val_all = scn_predict(cnProc=class_info[['cnProc']], expDat = expTest, nrand = 0)  # Removed rand # number of training and validation cells must be equal. genes in model must be in validation set. | issue: some dropped genes lead to error
     # SCN model assessment 
-    tm_heldoutassessment = assess_comm(ct_scores = classRes_val_all, stTrain = stTrain, stQuery = stTest, 
-                                    dLevelSID = "Cell", classTrain = class, classQuery = class, nRand = 0)
+    tm_heldoutassessment = assess_comm(ct_scores = classRes_val_all, stTrain = stTrain, stQuery = stTest, dLevelSID = "Cell", classTrain = class, classQuery = class, nRand = 0)
     AUC.SCN <- tm_heldoutassessment$AUPRC_w # get AUC value
 
 
     # Alternative model assessment (pROC package)
     ## Remove Rand 
     classRes_val_all <- as.data.frame(classRes_val_all)
-classRes_val_all <- classRes_val_all[!rownames(classRes_val_all) %in% 'rand' ,] # remove 'rand' category
+    classRes_val_all <- classRes_val_all[!rownames(classRes_val_all) %in% 'rand' ,] # remove 'rand' category | IS THAT OKAY? 
     classRes_val_labels <- unlist(apply(classRes_val_all, MARGIN = 2, function(x) { x <- names(which(x == max(x))) })) # generate labels based off highest probabilities (excluding Random)
-    classRes_val_labels <- classRes_val_labels[order(names(classRes_val_labels))] # order predicted labels alphabetically by cell 
+    classRes_val_labels <- classRes_val_labels[order(names(classRes_val_labels))] # order predicted labels alphabetically by cell | 
     classRes_val_labels <- classRes_val_labels[rownames(stTest)] ## Almost randomly, a cell or two are added with a digit after bar code, this step is to remove these extra cells until debugged
-  #  classRes_val_labels <- c(classRes_val_labels, classRes_val_labels[(length(classRes_val_labels)-49) : length(classRes_val_labels)] )
+  #  classRes_val_labels <- c(classRes_val_labels, classRes_val_labels[(length(classRes_val_labels)-49) : length(classRes_val_labels)] )  | DELETE FOR DEPLOYMENT
     
     
     stTest <- stTest[order(rownames(stTest)),  ]    # order true labels alphabetically by cell
     test <- stTest[, class]
-  #  test <- c(stTest[, class], rep('rand', 50))
-
-    AUC.pROC <- multiclass.roc(factor(test, ordered = TRUE), factor(classRes_val_labels, ordered = TRUE))$auc[1]
+  #  test <- c(stTest[, class], rep('rand', 50)) # DELETE FOR DEPLOYMENT
+    AUC.pROC <- multiclass.roc(as.numeric(factor(test)), as.numeric(factor(classRes_val_labels)))$auc[1]
 
 
     print(paste('SCN-AUC =', AUC.SCN))
@@ -232,7 +217,7 @@ classRes_val_all <- classRes_val_all[!rownames(classRes_val_all) %in% 'rand' ,] 
     avg.reads <- mean(total.reads)
     avg.genes <- mean(total.genes)
 
-    summ <- c(class, table_type, threshold, method, AUC.SCN, AUC.pROC, Vncells, nGenes, round(avg.reads), round(avg.genes)) 
+    summ <- c(class, table_type, threshold, method, AUC.SCN, AUC.pROC, ncells, nGenes, round(avg.reads), round(avg.genes)) 
     summ.out <- rbind(summ.out, summ)
 
     names(total.reads) <- NULL
@@ -254,19 +239,20 @@ classRes_val_all <- classRes_val_all[!rownames(classRes_val_all) %in% 'rand' ,] 
 }
 
 # parameters 
-nGenes <- 25 # nTopGenes for model training 
-Tncells <- 400 # nCells/class for training dataset
-Vncells <- 400 # nCells/class for testing dataset
-threshold_list <- c(200, 400, 600, 800, 1000, 1500, 2000, 3000, 4000) # thresholds to be tested
+nGenes <- 100 # nTopGenes for model training 
+ncells <- 400 # nCells/class for training & testing dataset
+# threshold_list <- c(200, 400, 600, 800, 1000, 1500, 2000, 3000, 4000) # thresholds to be tested
+# threshold_list <- c(0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500) # thresholds to be tested
+threshold_list <- c(0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 600, 700, 800, 900, 1000, 1500, 2000, 3000, 4000) # thresholds to be tested
 
 
 RF_run('Lineage', 'poisson')
 RF_run('Celltype', 'poisson')
 
-RF_run('Lineage', 'non-binary')
-RF_run('Celltype', 'non-binary')
+# RF_run('Lineage', 'non-binary')
+# RF_run('Celltype', 'non-binary')
 
-RF_run('Lineage', 'binary')
-RF_run('Celltype', 'binary')
+# RF_run('Lineage', 'binary')
+# RF_run('Celltype', 'binary')
 
 

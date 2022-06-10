@@ -12,15 +12,14 @@ library(SingleR)
 library(singleCellNet)
 library(pROC)
 library(BiocParallel)
-library(multiROC)
 
 setwd('/Users/ibishara/Desktop/FELINE_C1/')
 numCores <- detectCores()
 numCores 
 
 # data
-lineage.markers <- read.table('Annotation.lineage.markers.txt', sep = '\t' )
-celltype.markers <- read.table('Annotation.celltype.markers.txt', sep = '\t' )
+# lineage.markers <- read.table('Annotation.lineage.markers.txt', sep = '\t' )
+# celltype.markers <- read.table('Annotation.celltype.markers.txt', sep = '\t' )
 
 # High quality FELINE C1 data
 seu_HQ <- qread(file = "seu_HQ.qs", nthreads = numCores)
@@ -60,16 +59,16 @@ SR_run <- function (class, method) {
     dir.create(sub.dir.down)
 
     # Select marker genes identified by Seurat::FindAllMarkers() for class determination 
-    if ( class == 'Lineage'){ 
-        common.genes <- intersect(rownames(seu.HQ.counts), lineage.markers$gene)
-    } else if ( class == 'Celltype') {
-        common.genes <- intersect(rownames(seu.HQ.counts), celltype.markers$gene)
-        }
+    # if ( class == 'Lineage'){ 
+    #     common.genes <- intersect(rownames(seu.HQ.counts), lineage.markers$gene)
+    # } else if ( class == 'Celltype') {
+    #     common.genes <- intersect(rownames(seu.HQ.counts), celltype.markers$gene)
+    #     }
     
     set.seed(100)
     
     # Split 50 / 50 
-    stList = splitCommon(sampTab = meta, ncells = Tncells, dLevel = class) # At certain thresholds, there's not enough remaining cells for training 
+    stList = splitCommon(sampTab = meta, ncells = ncells, dLevel = class) # At certain thresholds, there's not enough remaining cells for training 
     stSub = stList[[1]]
     stTrain = stSub[sample(nrow(stSub), round(nrow(stSub)/2)), ]
     stTest = stSub[! rownames(stSub) %in% rownames(stTrain) ,]
@@ -98,8 +97,8 @@ SR_run <- function (class, method) {
     qsave(class_info, file= paste(output.dir, '/Trained_model_for_', class, '_', method,'.qs', sep='' ), nthreads= numCores)
 
     # pre-transformation Diagnostics
-    tot_counts_train <- unlist(mclapply(as.data.frame(expTrain.full), function (x) sum(x), mc.cores= numCores ))
-    tot_genes_train <- unlist(mclapply(as.data.frame(expTrain.full), function (x) sum(x > 0), mc.cores= numCores ))
+    tot_counts_train <- unlist(mclapply(as.data.frame(expTrain), function (x) sum(x), mc.cores= numCores ))
+    tot_genes_train <- unlist(mclapply(as.data.frame(expTrain), function (x) sum(x > 0), mc.cores= numCores ))
     tot_counts_test <- unlist(mclapply(as.data.frame(expTest), function (x) sum(x), mc.cores= numCores ))
     tot_genes_test <- unlist(mclapply(as.data.frame(expTest), function (x) sum(x > 0), mc.cores= numCores ))
     pdf('SCN/Train_Test_sets_corr_plot.pdf')
@@ -138,9 +137,6 @@ SR_run <- function (class, method) {
             total.genes <- apply(transformed, MARGIN = 2, function(x) sum(x > 0))  # convert reads to binary to pull n genes 
             rownames(transformed) <- genes
             total <- total.reads # 
-
-        plot(total.reads, total.genes, main= paste('Testing set, n =', length(total.reads))) # temp
-
 
   
         } else if (method == 'binary'){
@@ -183,7 +179,7 @@ SR_run <- function (class, method) {
     # SingleR model evaluation 
     stTest <- stTest[ order(rownames(stTest)), ]    # order true labels alphabetically by cell
     classRes_val_all <- classRes_val_all[order(rownames(classRes_val_all)),] # order predicted labels alphabetically by cell 
-    AUC.pROC <- multiclass.roc(factor(stTest[, class], ordered = TRUE), factor(classRes_val_all$labels, ordered = TRUE))$auc[1]
+    AUC.pROC <- multiclass.roc(as.numeric(factor(stTest[, class])), as.numeric(factor(classRes_val_all$labels)))$auc[1]
 
     print(paste('pROC-AUC =', AUC.pROC))
 
@@ -203,7 +199,7 @@ SR_run <- function (class, method) {
     avg.reads <- mean(total.reads)
     avg.genes <- mean(total.genes)
 
-    summ <- c(class, table_type, threshold, method, AUC.pROC, Vncells, round(avg.reads), round(avg.genes)) 
+    summ <- c(class, table_type, threshold, method, AUC.pROC, ncells, round(avg.reads), round(avg.genes)) 
     summ.out <- rbind(summ.out, summ)
 
     names(total.reads) <- NULL
@@ -216,7 +212,7 @@ SR_run <- function (class, method) {
     } # end of loop 
 
     print(noquote('Generating summary table'))
-    colnames(summ.out) <- c( 'class', 'source', 'threshold','method', 'AUC_pROC', 'VnCells', 'Avg.Reads', 'Avg.Genes')
+    colnames(summ.out) <- c( 'class', 'source', 'threshold','method', 'AUC_pROC', 'nCells', 'Avg.Reads', 'Avg.Genes')
     write.table(summ.out, paste(getwd() , '/', experiment, '_Performance_summary_', method, '_', class, '.txt' , sep=''), col.names = TRUE, sep = '\t') 
     # export the reads and genes ditribution at each threshold 
     print(noquote('Generating distribution tables'))
@@ -225,10 +221,10 @@ SR_run <- function (class, method) {
 }
 
 # parameters 
-nGenes <- 25 # nTopGenes for model training 
-Tncells <- 400 # nCells/class for training dataset
-Vncells <- 400 # nCells/class for testing dataset
-threshold_list <- c(200, 400, 600, 800, 1000, 1500, 2000, 3000, 4000) # thresholds to be tested
+ncells <- 400 # nCells/class for training & testing dataset
+# threshold_list <- c(200, 400, 600, 800, 1000, 1500, 2000, 3000, 4000) # thresholds to be tested
+# threshold_list <- c(0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500) # thresholds to be tested
+threshold_list <- c(0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 600, 700, 800, 900, 1000, 1500, 2000, 3000, 4000) # thresholds to be tested
 
 
 SR_run('Lineage', 'poisson')
@@ -237,10 +233,10 @@ SR_run('Celltype', 'poisson')
 
 
 
-SR_run('Lineage', 'non-binary')
-SR_run('Celltype', 'non-binary')
+# SR_run('Lineage', 'non-binary')
+# SR_run('Celltype', 'non-binary')
 
-SR_run('Lineage', 'binary')
-SR_run('Celltype', 'binary')
+# SR_run('Lineage', 'binary')
+# SR_run('Celltype', 'binary')
 
 
