@@ -7,7 +7,7 @@ library(Seurat)
 library(qs)
 
 # data
-seu_HQ <- qread(file = "seu_HQ.qs", nthreads = 16)
+seu_HQ <- qread(file = "seu_HQ.qs")
 
 # Identify Lineage markers in HQ cells 
 Idents(seu_HQ) <- "Lineage"

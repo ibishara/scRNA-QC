@@ -38,6 +38,32 @@ red.reads <- function(x, y){
     return(x)
     }
 
+# function converts each column/cell to  read counts to binary, remove n genes above threshold then export a binary matrix
+# x = vector/column/cell in filtered dataframe
+# y = threshold
+bin = function(x, y){
+
+    if(total > y){
+        pre.index <- which(x == 1) # index of expressed genes 
+        x[sample(pre.index , total - y)] <- 0 # randomly convert a number of genes over threshold from 1 -> 0
+         }
+    return(x)
+}
+
+# function works on each column/cell to convert read counts to binary, remove n genes above threshold then convert back to non-binary counts
+# x = vector/column/cell in filtered dataframe
+# y = threshold
+nonbin = function(x, y){
+    orig <- x # maitain count matrix 
+    total = sum(x > 0) # number of expressed genes
+    if(total > y){ 
+        pre.index <- which(x == 1) # index of expressed genes 
+        x[sample(pre.index , total - y)] <- 0 # random convert a number of genes over threshold from 1 -> 0
+    }
+    x <- ifelse(x == 0, 0, orig)   # convert expressed genes back to their counts
+    return(x)
+}
+
 
 # This function trains a classifier based off method, then loop over different thresholds to produce AUC values 
 # Arguments: 
@@ -82,7 +108,7 @@ SR_run <- function (class, method) {
 
     if (method == 'binary'){
         expTrain[expTrain > 0] <- 1 # transform training counts to binary
-        expTest[expTest > 0] <- 1 # transform testing counts to binary
+       # expTest[expTest > 0] <- 1 # transform testing counts to binary
     }
 
     # model training
@@ -145,7 +171,7 @@ SR_run <- function (class, method) {
             transformed <- as.data.frame(mclapply(counts, FUN = bin, i, mc.cores= numCores)) # binary output
             total.genes <- colSums(transformed)
             rownames(transformed) <- genes
-            total.reads <- rep(0, ncol(transformed)) 
+            total.reads <- rep(0, ncol(transformed)) # doesn't calculate nReads 
             total <- total.genes
 
         } else if (method == 'non-binary'){ 
@@ -153,9 +179,7 @@ SR_run <- function (class, method) {
             # Transform genes tables 
             transformed <- as.data.frame(mclapply(counts, FUN = nonbin, i, mc.cores= numCores)) # normal output
             total.reads <- colSums(transformed)
-            t.binary <- transformed
-            t.binary <- as.data.frame(mclapply(t.binary, FUN = function(x) {ifelse( x > 0, 1, 0)}, mc.cores= numCores))# convert reads to binary
-            total.genes <- colSums(t.binary)
+            total.genes <- apply(transformed, MARGIN = 2, function(x) sum(x > 0))  # convert reads to binary to pull n genes          
             rownames(transformed) <- genes
             total <- total.genes
         }
@@ -233,10 +257,10 @@ SR_run('Celltype', 'poisson')
 
 
 
-# SR_run('Lineage', 'non-binary')
-# SR_run('Celltype', 'non-binary')
+SR_run('Lineage', 'non-binary')
+SR_run('Celltype', 'non-binary')
 
-# SR_run('Lineage', 'binary')
-# SR_run('Celltype', 'binary')
+SR_run('Lineage', 'binary')
+SR_run('Celltype', 'binary')
 
 

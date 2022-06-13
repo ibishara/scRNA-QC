@@ -37,6 +37,32 @@ red.reads <- function(x, y){
     return(x)
     }
 
+# function converts each column/cell to  read counts to binary, remove n genes above threshold then export a binary matrix
+# x = vector/column/cell in filtered dataframe
+# y = threshold
+bin = function(x, y){
+
+    if(total > y){
+        pre.index <- which(x == 1) # index of expressed genes 
+        x[sample(pre.index , total - y)] <- 0 # randomly convert a number of genes over threshold from 1 -> 0
+         }
+    return(x)
+}
+
+# function works on each column/cell to convert read counts to binary, remove n genes above threshold then convert back to non-binary counts
+# x = vector/column/cell in filtered dataframe
+# y = threshold
+nonbin = function(x, y){
+    orig <- x # maitain count matrix 
+    total = sum(x > 0) # number of expressed genes
+    if(total > y){ 
+        pre.index <- which(x == 1) # index of expressed genes 
+        x[sample(pre.index , total - y)] <- 0 # random convert a number of genes over threshold from 1 -> 0
+    }
+    x <- ifelse(x == 0, 0, orig)   # convert expressed genes back to their counts
+    return(x)
+}
+
 
 # This function trains a classifier based off method, then loop over different thresholds to produce AUC values 
 # Arguments: 
@@ -80,13 +106,13 @@ RF_run <- function (class, method) {
 
     if (method == 'binary'){
         expTrain[expTrain > 0] <- 1 # transform training counts to binary
-        expTest[expTest > 0] <- 1 # transform testing counts to binary
+       # expTest[expTest > 0] <- 1 # transform testing counts to binary
     }
 
     # model training
-    system.time(class_info <- scn_train(stTrain = stTrain, expTrain = expTrain, 
-                            nTopGenes = nGenes, nRand = 50, nTrees = 1000, nTopGenePairs = nGenes*2, 
-                            dLevel = class, colName_samp = "Cell"))
+    class_info <- scn_train(stTrain = stTrain, expTrain = expTrain, 
+                    nTopGenes = nGenes, nRand = 50, nTrees = 1000, nTopGenePairs = nGenes*2, 
+                    dLevel = class, colName_samp = "Cell")
     # Save model 
     qsave(class_info, file= paste(output.dir, '/Trained_model_for_', class, '_', method,'.qs', sep='' ), nthreads= numCores)
 
@@ -130,10 +156,7 @@ RF_run <- function (class, method) {
             total.reads <- colSums(transformed)
             total.genes <- apply(transformed, MARGIN = 2, function(x) sum(x > 0))  # convert reads to binary to pull n genes 
             rownames(transformed) <- genes
-            total <- total.reads # 
-
-        plot(total.reads, total.genes, main= paste('Testing set, n =', length(total.reads))) # temp
-
+            total <- total.reads 
   
         } else if (method == 'binary'){
             table_type <- 'genes'
@@ -141,7 +164,7 @@ RF_run <- function (class, method) {
             transformed <- as.data.frame(mclapply(counts, FUN = bin, i, mc.cores= numCores)) # binary output
             total.genes <- colSums(transformed)
             rownames(transformed) <- genes
-            total.reads <- rep(0, ncol(transformed)) 
+            total.reads <- rep(0, ncol(transformed)) # doesn't calculate nReads 
             total <- total.genes
 
         } else if (method == 'non-binary'){ 
@@ -149,9 +172,7 @@ RF_run <- function (class, method) {
             # Transform genes tables 
             transformed <- as.data.frame(mclapply(counts, FUN = nonbin, i, mc.cores= numCores)) # normal output
             total.reads <- colSums(transformed)
-            t.binary <- transformed
-            t.binary <- as.data.frame(mclapply(t.binary, FUN = function(x) {ifelse( x > 0, 1, 0)}, mc.cores= numCores))# convert reads to binary
-            total.genes <- colSums(t.binary)
+            total.genes <- apply(transformed, MARGIN = 2, function(x) sum(x > 0))  # convert reads to binary to pull n genes          
             rownames(transformed) <- genes
             total <- total.genes
         }
@@ -249,10 +270,10 @@ threshold_list <- c(0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 600, 700
 RF_run('Lineage', 'poisson')
 RF_run('Celltype', 'poisson')
 
-# RF_run('Lineage', 'non-binary')
-# RF_run('Celltype', 'non-binary')
+RF_run('Lineage', 'non-binary')
+RF_run('Celltype', 'non-binary')
 
-# RF_run('Lineage', 'binary')
-# RF_run('Celltype', 'binary')
+RF_run('Lineage', 'binary')
+RF_run('Celltype', 'binary')
 
 
