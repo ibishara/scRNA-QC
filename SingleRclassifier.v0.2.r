@@ -55,7 +55,8 @@ bin = function(x, y){
 # y = threshold
 nonbin = function(x, y){
     orig <- x # maitain count matrix 
-    total = sum(x > 0) # number of expressed genes
+    x[x > 0] <- 1  # convert reads to binary
+    total = sum(x) # number of expressed genes 
     if(total > y){ 
         pre.index <- which(x == 1) # index of expressed genes 
         x[sample(pre.index , total - y)] <- 0 # random convert a number of genes over threshold from 1 -> 0

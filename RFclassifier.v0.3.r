@@ -54,7 +54,8 @@ bin = function(x, y){
 # y = threshold
 nonbin = function(x, y){
     orig <- x # maitain count matrix 
-    total = sum(x > 0) # number of expressed genes
+    x[x > 0] <- 1  # convert reads to binary
+    total = sum(x) # number of expressed genes 
     if(total > y){ 
         pre.index <- which(x == 1) # index of expressed genes 
         x[sample(pre.index , total - y)] <- 0 # random convert a number of genes over threshold from 1 -> 0
@@ -67,12 +68,12 @@ nonbin = function(x, y){
 # This function trains a classifier based off method, then loop over different thresholds to produce AUC values 
 # Arguments: 
 # class <- 'Celltype' , 'Lineage'
-# method <- 'floor', 'binary', 'non-binary', 'poisson'
+# method <- 'binary', 'non-binary', 'poisson'
 RF_run <- function (class, method) {
 
-    # class <- 'Celltype' # diagnostic 
-    # method <- 'poisson' # diagnostic
-    # i <- 800 # diagnostic 
+    # class <- 'Lineage' # diagnostic 
+    # method <- 'non-binary' # diagnostic
+    # i <- 0 # diagnostic 
 
     # Create export directories 
     experiment <- 'SCN'
@@ -116,15 +117,15 @@ RF_run <- function (class, method) {
     # Save model 
     qsave(class_info, file= paste(output.dir, '/Trained_model_for_', class, '_', method,'.qs', sep='' ), nthreads= numCores)
 
-    # pre-transformation Diagnostics
-    tot_counts_train <- unlist(mclapply(as.data.frame(expTrain), function (x) sum(x), mc.cores= numCores ))
-    tot_genes_train <- unlist(mclapply(as.data.frame(expTrain), function (x) sum(x > 0), mc.cores= numCores ))
-    tot_counts_test <- unlist(mclapply(as.data.frame(expTest), function (x) sum(x), mc.cores= numCores ))
-    tot_genes_test <- unlist(mclapply(as.data.frame(expTest), function (x) sum(x > 0), mc.cores= numCores ))
-    pdf('SCN/Train_Test_sets_corr_plot.pdf')
-        plot(tot_counts_train, tot_genes_train, main= paste('Training set, n =', length(tot_counts_train))); abline(lm(tot_genes_train ~ tot_counts_train))
-        plot(tot_counts_test, tot_genes_test, main= paste('Testing set, n =', length(tot_counts_test))); abline(lm(tot_genes_test ~ tot_counts_test))
-    dev.off()
+    # # pre-transformation Diagnostics
+    # tot_counts_train <- unlist(mclapply(as.data.frame(expTrain), function (x) sum(x), mc.cores= numCores ))
+    # tot_genes_train <- unlist(mclapply(as.data.frame(expTrain), function (x) sum(x > 0), mc.cores= numCores ))
+    # tot_counts_test <- unlist(mclapply(as.data.frame(expTest), function (x) sum(x), mc.cores= numCores ))
+    # tot_genes_test <- unlist(mclapply(as.data.frame(expTest), function (x) sum(x > 0), mc.cores= numCores ))
+    # pdf('SCN/Train_Test_sets_corr_plot.pdf')
+    #     plot(tot_counts_train, tot_genes_train, main= paste('Training set, n =', length(tot_counts_train))); abline(lm(tot_genes_train ~ tot_counts_train))
+    #     plot(tot_counts_test, tot_genes_test, main= paste('Testing set, n =', length(tot_counts_test))); abline(lm(tot_genes_test ~ tot_counts_test))
+    # dev.off()
 
     genes <- rownames(expTest)
 
