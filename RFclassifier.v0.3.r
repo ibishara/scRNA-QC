@@ -72,8 +72,8 @@ nonbin = function(x, y){
 RF_run <- function (class, method) {
 
     # class <- 'Lineage' # diagnostic 
-    # method <- 'non-binary' # diagnostic
-    # i <- 0 # diagnostic 
+    # method <- 'poisson' # diagnostic
+    # i <- 400 # diagnostic 
 
     # Create export directories 
     experiment <- 'SCN'
@@ -102,12 +102,12 @@ RF_run <- function (class, method) {
     expTrain <- expTrain.full[common.genes, ]
 
     expTest = seu.HQ.counts[ , rownames(stTest)]
-    control.test <- expTest[common.genes, ] # untransformed reads as a test control\
+    control.test <- expTest # untransformed reads as a test control\
 
 
     if (method == 'binary'){
         expTrain[expTrain > 0] <- 1 # transform training counts to binary
-       # expTest[expTest > 0] <- 1 # transform testing counts to binary
+       # expTest[expTest > 0] <- 1 # unnesessary since counts are transformed to binary via bin function 
     }
 
     # model training
@@ -177,67 +177,101 @@ RF_run <- function (class, method) {
             rownames(transformed) <- genes
             total <- total.genes
         }
-    
-    # export transformed data
-    path <- paste(sub.dir.down, '/', table_type, '_down_', threshold, '_', class, sep='')
-    fwrite(transformed, paste(path, '.txt', sep=''), sep='\t', nThread = numCores, row.names = TRUE)
+        
+        # export transformed data
+        path <- paste(sub.dir.down, '/', table_type, '_down_', threshold, '_', class, sep='')
+        fwrite(transformed, paste(path, '.txt', sep=''), sep='\t', nThread = numCores, row.names = TRUE)
 
-    # export hist and stats 
-    sdat <- summary(total)   
-    summStr <- paste(names(sdat), format(sdat, digits = 2), collapse = "; ")
-    pdf(paste(path,'.pdf', sep=''), onefile =FALSE)
-    plot(hist(total), xlab = paste('n', table_type, '/cell', sep='') , main = paste('threshold', i, table_type), sub = summStr, col="#1e72d2") 
-    dev.off()
+        # export hist and stats 
+        sdat <- summary(total)   
+        summStr <- paste(names(sdat), format(sdat, digits = 2), collapse = "; ")
+        pdf(paste(path,'.pdf', sep=''), onefile =FALSE)
+        plot(hist(total), xlab = paste('n', table_type, '/cell', sep='') , main = paste('threshold', i, table_type), sub = summStr, col="#1e72d2") 
+        dev.off()
 
-    expTest <- as.data.frame(transformed[common.genes, ]) 
+        expTest <- as.data.frame(transformed[common.genes, ]) # filter test set for common genes 
+        # SCN prediction
+        classRes_val_all = scn_predict(cnProc=class_info[['cnProc']], expDat = expTest, nrand = 0)  # Removed rand # number of training and validation cells must be equal. genes in model must be in validation set. | issue: some dropped genes lead to error
+        # SCN model assessment | remove for deployment
+        tm_heldoutassessment = assess_comm(ct_scores = classRes_val_all, stTrain = stTrain, stQuery = stTest, dLevelSID = "Cell", classTrain = class, classQuery = class, nRand = 0)
+        AUC.SCN <- tm_heldoutassessment$AUPRC_w # get AUC value
+
+
+        #  model assessment (pROC package)
+        ## Remove Rand 
+        classRes_val_all <- as.data.frame(classRes_val_all)
+        classRes_val_all <- classRes_val_all[!rownames(classRes_val_all) %in% 'rand' ,] # remove 'rand' category 
+        classRes_val_labels <- unlist(apply(classRes_val_all, MARGIN = 2, function(x) { x <- names(which(x == max(x))) })) # generate labels based off highest probabilities (excluding Random)
+        classRes_val_labels <- classRes_val_labels[order(names(classRes_val_labels))] # order predicted labels alphabetically by cell | 
+        classRes_val_labels <- classRes_val_labels[rownames(stTest)] ## Almost randomly, a cell or two are added with a digit after bar code, this step is to remove these extra cells until debugged
+        
+        
+        stTest <- stTest[order(rownames(stTest)),  ]    # order true labels alphabetically by cell
+        test <- stTest[, class]
+        AUC.pROC <- multiclass.roc(as.numeric(factor(test)), as.numeric(factor(classRes_val_labels)))$auc[1]
+
+        print(paste('SCN-AUC =', AUC.SCN)) # diagnostic
+        print(paste('pROC-AUC =', AUC.pROC)) # diagnostic
+
+        ## Plot performance metrics 
+        print(noquote('Generating plots'))
+        # plots 
+        pdf(paste(sub.dir.perf, '/', method, '_', class, '_', threshold, '.pdf', sep = ''))
+                hist(total.reads, main = paste(table_type, '_', method, '_', class, '_', threshold, sep = ''))         
+                hist(total.genes, main = paste(table_type, '_', method, '_', class, '_', threshold, sep = ''))
+                plot(plot_PRs(tm_heldoutassessment))
+                # plot(plot_attr(classRes = classRes_val_all, sampTab=stTest, nrand=50, dLevel=class, sid="Cell"))
+                plot(plot_metrics(tm_heldoutassessment))
+                if (method == 'floor' | method == 'non-binary') {
+                    coeff <- round(cor(total.reads, total.genes), 2)
+                    plot(log10(total.reads), log10(total.genes), pch = 20, cex = 0.2,  
+                    main = paste('Transformed using', method, 'at threshold', i, table_type), sub = paste("Pearson's coefficient =", coeff), 
+                    xlab = "log10 number of reads", ylab = "log10 number of unique genes" )}
+        dev.off()
+
+        avg.reads <- mean(total.reads)
+        avg.genes <- mean(total.genes)
+
+        summ <- c(class, table_type, threshold, method, AUC.SCN, AUC.pROC, ncells, nGenes, round(avg.reads), round(avg.genes)) 
+        summ.out <- rbind(summ.out, summ)
+
+        names(total.reads) <- NULL
+        total.reads <- c(threshold, total.reads)
+        dist.reads <- rbind(dist.reads, total.reads)
+
+        names(total.genes) <- NULL
+        total.genes <- c(threshold, total.genes)
+        dist.genes <- rbind(dist.genes, total.genes)
+    } # end of loop 
+
+
+    ## add AUC for untransformed control ##
+    threshold <- 'untransformed'
+    if (method == 'poisson'){ table_type <- 'reads' }
+    total.reads <- colSums(control.test)
+    total.genes <- apply(control.test, MARGIN = 2, function(x) sum(x > 0))  
+    avg.reads <- mean(total.reads)
+    avg.genes <- mean(total.genes)
+    rownames(control.test) <- genes
+    total <- total.reads 
     # SCN prediction
-    classRes_val_all = scn_predict(cnProc=class_info[['cnProc']], expDat = expTest, nrand = 0)  # Removed rand # number of training and validation cells must be equal. genes in model must be in validation set. | issue: some dropped genes lead to error
-    # SCN model assessment 
+    control.test <- control.test[common.genes, ] # filter for common genes 
+    classRes_val_all = scn_predict(cnProc=class_info[['cnProc']], expDat = control.test, nrand = 0) 
+    # SCN model assessment | remove for deployment
     tm_heldoutassessment = assess_comm(ct_scores = classRes_val_all, stTrain = stTrain, stQuery = stTest, dLevelSID = "Cell", classTrain = class, classQuery = class, nRand = 0)
     AUC.SCN <- tm_heldoutassessment$AUPRC_w # get AUC value
 
-
-    # Alternative model assessment (pROC package)
+    #  model assessment (pROC package)
     ## Remove Rand 
     classRes_val_all <- as.data.frame(classRes_val_all)
-    classRes_val_all <- classRes_val_all[!rownames(classRes_val_all) %in% 'rand' ,] # remove 'rand' category | IS THAT OKAY? 
+    classRes_val_all <- classRes_val_all[!rownames(classRes_val_all) %in% 'rand' ,] # remove 'rand' category 
     classRes_val_labels <- unlist(apply(classRes_val_all, MARGIN = 2, function(x) { x <- names(which(x == max(x))) })) # generate labels based off highest probabilities (excluding Random)
     classRes_val_labels <- classRes_val_labels[order(names(classRes_val_labels))] # order predicted labels alphabetically by cell | 
     classRes_val_labels <- classRes_val_labels[rownames(stTest)] ## Almost randomly, a cell or two are added with a digit after bar code, this step is to remove these extra cells until debugged
-  #  classRes_val_labels <- c(classRes_val_labels, classRes_val_labels[(length(classRes_val_labels)-49) : length(classRes_val_labels)] )  | DELETE FOR DEPLOYMENT
     
-    
-    stTest <- stTest[order(rownames(stTest)),  ]    # order true labels alphabetically by cell
+    stTest <- stTest[order(rownames(stTest)),  ]   # order true labels alphabetically by cell
     test <- stTest[, class]
-  #  test <- c(stTest[, class], rep('rand', 50)) # DELETE FOR DEPLOYMENT
     AUC.pROC <- multiclass.roc(as.numeric(factor(test)), as.numeric(factor(classRes_val_labels)))$auc[1]
-
-
-    print(paste('SCN-AUC =', AUC.SCN))
-    print(paste('pROC-AUC =', AUC.pROC))
-    # changed from : 
-    #     AUC.pROC <- multiclass.roc(stTest[, class], factor(classRes_val_labels[1,], ordered = TRUE))$auc[1]
-    #     }
-    # AUC.pROC <- multiclass.roc(stTest[, class], factor(classRes_val_labels, ordered = TRUE))$auc[1]
-
-    ## Plot performance metrics 
-    print(noquote('Generating plots'))
-    # plots 
-    pdf(paste(sub.dir.perf, '/', method, '_', class, '_', threshold, '.pdf', sep = ''))
-            hist(total.reads, main = paste(table_type, '_', method, '_', class, '_', threshold, sep = ''))         
-            hist(total.genes, main = paste(table_type, '_', method, '_', class, '_', threshold, sep = ''))
-            plot(plot_PRs(tm_heldoutassessment))
-            # plot(plot_attr(classRes = classRes_val_all, sampTab=stTest, nrand=50, dLevel=class, sid="Cell"))
-            plot(plot_metrics(tm_heldoutassessment))
-            if (method == 'floor' | method == 'non-binary') {
-                coeff <- round(cor(total.reads, total.genes), 2)
-                plot(log10(total.reads), log10(total.genes), pch = 20, cex = 0.2,  
-                main = paste('Transformed using', method, 'at threshold', i, table_type), sub = paste("Pearson's coefficient =", coeff), 
-                xlab = "log10 number of reads", ylab = "log10 number of unique genes" )}
-    dev.off()
-
-    avg.reads <- mean(total.reads)
-    avg.genes <- mean(total.genes)
 
     summ <- c(class, table_type, threshold, method, AUC.SCN, AUC.pROC, ncells, nGenes, round(avg.reads), round(avg.genes)) 
     summ.out <- rbind(summ.out, summ)
@@ -249,7 +283,8 @@ RF_run <- function (class, method) {
     names(total.genes) <- NULL
     total.genes <- c(threshold, total.genes)
     dist.genes <- rbind(dist.genes, total.genes)
-    } # end of loop 
+    #######
+
 
     print(noquote('Generating summary table'))
     colnames(summ.out) <- c( 'class', 'source', 'threshold','method', 'AUC_SCN', 'AUC_pROC', 'VnCells', 'nTopGenes', 'Avg.Reads', 'Avg.Genes')
@@ -263,7 +298,7 @@ RF_run <- function (class, method) {
 # parameters 
 nGenes <- 100 # nTopGenes for model training 
 ncells <- 400 # nCells/class for training & testing dataset
-# threshold_list <- c(200, 400, 600, 800, 1000, 1500, 2000, 3000, 4000) # thresholds to be tested
+# threshold_list <- c(200, 400, 600, 800) # thresholds to be tested
 # threshold_list <- c(0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500) # thresholds to be tested
 threshold_list <- c(0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 600, 700, 800, 900, 1000, 1500, 2000, 3000, 4000) # thresholds to be tested
 
