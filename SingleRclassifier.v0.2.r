@@ -42,7 +42,8 @@ red.reads <- function(x, y){
 # x = vector/column/cell in filtered dataframe
 # y = threshold
 bin = function(x, y){
-
+    x[x > 0] <- 1  # convert reads to binary
+    total = sum(x) # number of expressed genes 
     if(total > y){
         pre.index <- which(x == 1) # index of expressed genes 
         x[sample(pre.index , total - y)] <- 0 # randomly convert a number of genes over threshold from 1 -> 0
@@ -72,9 +73,9 @@ nonbin = function(x, y){
 # method <- 'floor', 'binary', 'non-binary', 'poisson'
 SR_run <- function (class, method) {
 
-    # class <- 'Celltype' # diagnostic 
-    # method <- 'poisson' # diagnostic
-    # i <- 800 # diagnostic 
+    class <- 'Lineage' # diagnostic 
+    method <- 'non-binary' # diagnostic
+    i <- 4000 # diagnostic 
 
     # Create export directories 
     experiment <- 'SR'
@@ -85,12 +86,6 @@ SR_run <- function (class, method) {
     sub.dir.down <- paste(output.dir, '/downsample', sep='')
     dir.create(sub.dir.down)
 
-    # Select marker genes identified by Seurat::FindAllMarkers() for class determination 
-    # if ( class == 'Lineage'){ 
-    #     common.genes <- intersect(rownames(seu.HQ.counts), lineage.markers$gene)
-    # } else if ( class == 'Celltype') {
-    #     common.genes <- intersect(rownames(seu.HQ.counts), celltype.markers$gene)
-    #     }
     
     set.seed(100)
     
@@ -105,8 +100,6 @@ SR_run <- function (class, method) {
     expTest = seu.HQ.counts[ , rownames(stTest)]
     control.test <- expTest # untransformed reads as a test control\
 
-
-
     if (method == 'binary'){
         expTrain[expTrain > 0] <- 1 # transform training counts to binary
        # expTest[expTest > 0] <- 1 # transform testing counts to binary
@@ -114,11 +107,10 @@ SR_run <- function (class, method) {
 
     # model training
     if ( class == 'Lineage'){ 
-        system.time(class_info <- trainSingleR(expTrain, stTrain$Lineage))
+        class_info <- trainSingleR(expTrain, stTrain$Lineage)
     } else if ( class == 'Celltype') {
-        system.time(class_info <- trainSingleR(expTrain, stTrain$Celltype))
+        class_info <- trainSingleR(expTrain, stTrain$Celltype)
     }
-
 
     # Save model 
     qsave(class_info, file= paste(output.dir, '/Trained_model_for_', class, '_', method,'.qs', sep='' ), nthreads= numCores)
@@ -141,23 +133,11 @@ SR_run <- function (class, method) {
     dist.genes <- data.frame()
     counts <- expTest
 
-    # Untransformed test control 
-    # change the variable names
-    # if (method == 'poisson'){ 
-    #     table_type <- 'reads'
-    #     total.reads <- colSums(control.test)
-    #     total.genes <- mclapply(control.test, function (x) sum(x > 0), mc.cores= numCores)  # convert reads to binary to pull n genes 
-    #     rownames(control.test) <- genes
-    #     total <- total.reads  
-    # }
-
-
     # Transform count matrix by loop over thresholds 
     for (i in threshold_list){
         threshold <- format(i/1000, nsmall=1)
         print(noquote(paste('Processing threshold', threshold)))
        if (method == 'poisson'){ 
-
             table_type <- 'reads'
             transformed <- apply(X = counts, MARGIN = 2, FUN = red.reads, y = i) # run 2nd function to reduce the number of count per cell above threshold. iterates over columns (cells)
             total.reads <- colSums(transformed)
@@ -169,16 +149,18 @@ SR_run <- function (class, method) {
         } else if (method == 'binary'){
             table_type <- 'genes'
             # Transform genes tables 
-            transformed <- as.data.frame(mclapply(counts, FUN = bin, i, mc.cores= numCores)) # binary output
+            transformed <- apply(X = counts, MARGIN = 2, FUN = bin, y = i) # binary output
             total.genes <- colSums(transformed)
             rownames(transformed) <- genes
-            total.reads <- rep(0, ncol(transformed)) # doesn't calculate nReads 
+            transformed.nonbin <- ifelse(transformed == 0, 0, counts)   # convert expressed genes back to their counts
+            total.reads <- colSums(transformed.nonbin)
+            total.genes <- colSums(transformed)
             total <- total.genes
 
         } else if (method == 'non-binary'){ 
             table_type <- 'genes'
             # Transform genes tables 
-            transformed <- as.data.frame(mclapply(counts, FUN = nonbin, i, mc.cores= numCores)) # normal output
+            transformed <- apply(X = counts, MARGIN = 2, FUN = nonbin, y = i) # non-binary output
             total.reads <- colSums(transformed)
             total.genes <- apply(transformed, MARGIN = 2, function(x) sum(x > 0))  # convert reads to binary to pull n genes          
             rownames(transformed) <- genes
@@ -189,12 +171,26 @@ SR_run <- function (class, method) {
     path <- paste(sub.dir.down, '/', table_type, '_down_', threshold, '_', class, sep='')
     fwrite(transformed, paste(path, '.txt', sep=''), sep='\t', nThread = numCores, row.names = TRUE)
 
+    ## Plot performance metrics 
+    print(noquote('Generating plots'))
+    # plots 
+    pdf(paste(sub.dir.perf, '/', method, '_', class, '_', threshold, '.pdf', sep = ''))
+            hist(total.reads, main = paste(table_type, '_', method, '_', class, '_', threshold, sep = ''))         
+            hist(total.genes, main = paste(table_type, '_', method, '_', class, '_', threshold, sep = ''))
+            if (max(total.reads) != 0) {  
+                coeff <- round(cor(total.reads, total.genes), 2)
+                plot(log10(total.reads), log10(total.genes), pch = 20, cex = 0.2,  
+                main = paste('Transformed using', method, 'at threshold', i, table_type), sub = paste("Pearson's coefficient =", coeff), 
+                xlab = "log10 number of reads", ylab = "log10 number of unique genes" )}
+    dev.off()
+
     # export hist and stats 
     sdat <- summary(total)   
     summStr <- paste(names(sdat), format(sdat, digits = 2), collapse = "; ")
     pdf(paste(path,'.pdf', sep=''), onefile =FALSE)
     plot(hist(total), xlab = paste('n', table_type, '/cell', sep='') , main = paste('threshold', i, table_type), sub = summStr, col="#1e72d2") 
     dev.off()
+
 
     expTest <- as.data.frame(transformed) # run on all genes 
 
@@ -207,19 +203,6 @@ SR_run <- function (class, method) {
     AUC.pROC <- multiclass.roc(as.numeric(factor(stTest[, class])), as.numeric(factor(classRes_val_all$labels)))$auc[1]
 
     print(paste('pROC-AUC =', AUC.pROC))
-
-    ## Plot performance metrics 
-    print(noquote('Generating plots'))
-    # plots 
-    pdf(paste(sub.dir.perf, '/', method, '_', class, '_', threshold, '.pdf', sep = ''))
-            hist(total.reads, main = paste(table_type, '_', method, '_', class, '_', threshold, sep = ''))         
-            hist(total.genes, main = paste(table_type, '_', method, '_', class, '_', threshold, sep = ''))
-            if (method == 'floor' | method == 'non-binary') {
-                coeff <- round(cor(total.reads, total.genes), 2)
-                plot(log10(total.reads), log10(total.genes), pch = 20, cex = 0.2,  
-                main = paste('Transformed using', method, 'at threshold', i, table_type), sub = paste("Pearson's coefficient =", coeff), 
-                xlab = "log10 number of reads", ylab = "log10 number of unique genes" )}
-    dev.off()
 
     avg.reads <- mean(total.reads)
     avg.genes <- mean(total.genes)
@@ -236,6 +219,39 @@ SR_run <- function (class, method) {
     dist.genes <- rbind(dist.genes, total.genes)
     } # end of loop 
 
+
+    ## add AUC for untransformed control ##
+    threshold <- 'untransformed'
+    if (method == 'poisson'){ table_type <- 'reads' }
+    total.reads <- colSums(control.test)
+    total.genes <- apply(control.test, MARGIN = 2, function(x) sum(x > 0))  
+    avg.reads <- mean(total.reads)
+    avg.genes <- mean(total.genes)
+    rownames(control.test) <- genes
+    total <- total.reads 
+    
+    # SingleR prediction
+    classRes_val_all = classifySingleR(control.test, class_info, fine.tune = FALSE, prune = FALSE, BPPARAM = MulticoreParam(numCores)) 
+
+    # model assessment (pROC package)
+    stTest <- stTest[ order(rownames(stTest)), ]    # order true labels alphabetically by cell
+    classRes_val_all <- classRes_val_all[order(rownames(classRes_val_all)),] # order predicted labels alphabetically by cell 
+    AUC.pROC <- multiclass.roc(as.numeric(factor(stTest[, class])), as.numeric(factor(classRes_val_all$labels)))$auc[1]
+    print(paste('pROC-AUC =', AUC.pROC))
+
+    summ <- c(class, table_type, threshold, method, AUC.pROC, ncells, round(avg.reads), round(avg.genes)) 
+    summ.out <- rbind(summ.out, summ)
+
+    names(total.reads) <- NULL
+    total.reads <- c(threshold, total.reads)
+    dist.reads <- rbind(dist.reads, total.reads)
+
+    names(total.genes) <- NULL
+    total.genes <- c(threshold, total.genes)
+    dist.genes <- rbind(dist.genes, total.genes)
+    #######
+
+
     print(noquote('Generating summary table'))
     colnames(summ.out) <- c( 'class', 'source', 'threshold','method', 'AUC_pROC', 'nCells', 'Avg.Reads', 'Avg.Genes')
     write.table(summ.out, paste(getwd() , '/', experiment, '_Performance_summary_', method, '_', class, '.txt' , sep=''), col.names = TRUE, sep = '\t') 
@@ -247,8 +263,6 @@ SR_run <- function (class, method) {
 
 # parameters 
 ncells <- 400 # nCells/class for training & testing dataset
-# threshold_list <- c(200, 400, 600, 800, 1000, 1500, 2000, 3000, 4000) # thresholds to be tested
-# threshold_list <- c(0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500) # thresholds to be tested
 threshold_list <- c(0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 600, 700, 800, 900, 1000, 1500, 2000, 3000, 4000) # thresholds to be tested
 
 

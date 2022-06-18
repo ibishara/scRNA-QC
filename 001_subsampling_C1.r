@@ -37,14 +37,13 @@ ref1 <- ref1[common.cells, ]
 # FELINE C1 high quality metadata with cell type annotations 
 meta_HQ <- left_join(ref1, ref2[, c('Cell','Celltype')], by = 'Cell' ) # combine both cell type annotations
 
-set.seed(100)
 sample.ncell <- 35000 # number of cells to sample for HQ and LQ
 
 
 ###############################
 ### HQ metadata subsampling ###
 ###############################
-
+set.seed(100)
 meta_HQ_sub <- meta_HQ[sample(nrow(meta_HQ), sample.ncell), ] 
 
 # Generate "Lineage" annotations
@@ -68,8 +67,8 @@ meta_HQ_sub <- meta_HQ_sub %>% mutate( Lineage = case_when(
 
 all.counts <- list.files(path = "/Users/ibishara/Desktop/FELINE_C1/raw/FELINE_cellranger_premRNA/", pattern = "*counts.txt", recursive = TRUE) # create a list of raw count tables from all batches
 count.filter.list <- mclapply(paste('raw/FELINE_cellranger_premRNA/', all.counts, sep=''), FUN = function(x) {
-count_sub <- fread(x, sep='auto', select= c("Gene Symbol",  meta_HQ_sub$Cell )) # cell ids subsampled from the metadata
-return(count_sub)  
+    count_sub <- fread(x, sep='auto', select= c("Gene Symbol",  meta_HQ_sub$Cell )) # cell ids subsampled from the metadata
+    return(count_sub)  
 }, mc.cores= numCores)
 
 HQ_count_batches_merged <- as.data.frame(do.call(cbind, count.filter.list))  #join list of tables 
@@ -86,14 +85,12 @@ fwrite(meta_HQ_sub, 'metadata_subsample_HQ.txt', sep='\t') # Export subsampled m
 rownames(meta_HQ_sub) <- meta_HQ_sub$Cell 
 seu_HQ <- CreateSeuratObject(counts= HQ_count_batches_merged, min.features= 0, min.cells = 0, names.delim= "_", meta.data= meta_HQ_sub) 
 
-# Hide patient ids 
-seu_HQ <- RenameCells(seu_HQ, new.names =  paste('Cell', seq(1, ncol(sorted_counts), 1), sep='_') ) 
-seu_HQ@meta.data$Cell <- rownames(seu_HQ@meta.data)
-seu_HQ@meta.data$orig.ident <- NULL
-
 # order counts and meta cells alphabetically to correct nCount_RNA &  nFeature_RNA
 seu.HQ.counts <- GetAssayData(seu_HQ, assay = "RNA")
-sorted_counts <- seu.HQ.counts[, order(colnames(seu.HQ.counts))] 
+seu.HQ.counts <- seu.HQ.counts[, order(colnames(seu.HQ.counts))] # Edit
+sorted_counts <- seu.HQ.counts
+# sorted_counts <- seu.HQ.counts[, order(colnames(seu.HQ.counts))] # Edit
+
 seu_HQ@meta.data <- seu_HQ@meta.data[order(rownames(seu_HQ@meta.data)) ,]
 
 all(colnames(sorted_counts) ==  rownames(seu_HQ@meta.data)) # test
@@ -101,7 +98,33 @@ all(colnames(sorted_counts) ==  rownames(seu_HQ@meta.data)) # test
 seu_HQ@meta.data$nCount_RNA = colSums(sorted_counts)  # corrected nCount_RNA
 seu_HQ@meta.data$nFeature_RNA = apply(sorted_counts, 2, function (x) sum(x > 0))  # corrected nFeature_RNA
 
-qsave(seu_HQ, file="seu_HQ.qs") # export seurat obj
+##  so far so good
+
+seu_HQ@meta.data <- seu_HQ@meta.data[, c('Cell', 'Percent.Mitochondria', 'Celltype', 'nCount_RNA', 'nFeature_RNA', 'Lineage')]
+qsave(seu_HQ, file="seu_HQ_no_id1.qs") # export seurat obj
+
+all(colnames(seu.HQ.counts) ==  rownames(seu_HQ@meta.data)) # test
+
+# Hide patient ids 
+seu_HQ_rename <- RenameCells(seu_HQ, new.names =  paste('Cell', seq(1, ncol(sorted_counts), 1), sep='_') ) 
+# ############################
+
+# meta <- seu_HQ@meta.data
+# seu.HQ.counts <- GetAssayData(seu_HQ, assay = "RNA")
+
+# meta_rename <- seu_HQ_rename@meta.data
+# seu.HQ.counts_rename <- GetAssayData(seu_HQ_rename, assay = "RNA")
+
+
+# all(meta == meta_rename)
+# all(seu.HQ.counts == seu.HQ.counts_rename)
+
+
+# ############################
+seu_HQ_rename@meta.data$Cell <- rownames(seu_HQ_rename@meta.data)
+
+qsave(seu_HQ_rename, file="seu_HQ_no_id2.qs") # export seurat obj | out of subscript
+
 
 
 meta <- seu_HQ@meta.data
@@ -111,13 +134,17 @@ fwrite(seu.HQ.counts, 'raw_counts_subsample_HQ_no_id.txt', sep='\t') # Export su
 fwrite(meta, 'metadata_subsample_HQ_no_id.txt', sep='\t') # Export subsampled metadata. no cell ids
 
 
+
+
 #################################
 #### LQ metadata subsampling ####
 #################################
-
+set.seed(200)
 meta_LQ <- meta.data[ !meta.data$Cell %in% meta_HQ$Cell, ] # remove HQ cells 
-meta_LQ_sub <- meta_LQ[sample(nrow(meta_LQ), sample.ncell), ] #
+meta_LQ_sub <- meta_LQ[sample(nrow(meta_LQ), sample.ncell), ] # random sampling
 meta_LQ_sub$V1 <- NULL
+
+
 
 # Read corresponding cell counts to correct nCounts_RNA and nFeature_RNA 
 all.counts <- list.files(path = "/Users/ibishara/Desktop/FELINE_C1/raw/FELINE_cellranger_premRNA/", pattern = "*counts.txt", recursive = TRUE) # create a list of raw count tables from all batches
@@ -137,25 +164,19 @@ LQ_count_batches_merged$'Gene Symbol' <- NULL
 sorted_counts <- LQ_count_batches_merged[, order(colnames(LQ_count_batches_merged))]
 sorted_meta <- meta_LQ_sub[order(meta_LQ_sub$Cell) ,]
 
-colnames(sorted_counts) ==  sorted_meta$Cell # test
+all(colnames(sorted_counts) ==  sorted_meta$Cell) # test
 
 sorted_meta$nCount_RNA = colSums(sorted_counts)  # corrected nCount_RNA
 sorted_meta$nFeature_RNA = apply(sorted_counts, 2, function (x) sum(x > 0))  # corrected nFeature_RNA
 
-
-## Randomize patient id
-sorted_meta[,1] <- colnames(sorted_counts)
-
-sorted_meta$Patient <- NULL
-sorted_meta$Batch <- NULL
-sorted_meta$Sample <- NULL
 meta_LQ_sub <- sorted_meta
-
 
 # Lineage annotations based off hpca annotations 
 meta_LQ_sub[["Lineage"]] <- meta_LQ_sub$hpca
 meta_LQ_sub <- meta_LQ_sub %>% mutate( Lineage = case_when(
         meta_LQ_sub[["hpca"]] == "Epithelial_cells"  ~ 'Epithelial_cells',
+        # meta_LQ_sub[["hpca"]] == "Neurons"  ~ 'Epithelial_cells',
+        # meta_LQ_sub[["hpca"]] == "Chondrocytes"  ~ 'Epithelial_cells',
         meta_LQ_sub[["hpca"]] == "Fibroblasts"  ~ 'Stromal_cells',
         meta_LQ_sub[["hpca"]] == "Smooth_muscle_cells"  ~ 'Stromal_cells',
         meta_LQ_sub[["hpca"]] == "Endothelial_cells"  ~ 'Stromal_cells',
@@ -171,7 +192,13 @@ meta_LQ_sub <- meta_LQ_sub %>% mutate( Lineage = case_when(
 
 names(meta_LQ_sub)[names(meta_LQ_sub) == 'Percent Mitochondria'] <- 'Percent.Mitochondria' # match names in HQ metadata 
 
+meta_LQ_sub <- meta_LQ_sub[, c('Cell', 'Percent.Mitochondria', 'hpca', 'nCount_RNA', 'nFeature_RNA', 'Lineage')]
+
 fwrite(meta_LQ_sub, 'metadata_subsample_LQ.txt', sep='\t') # Export subsampled metadata
 
+## Randomize patient id
+meta_LQ_sub$Cell <- paste('Cell', seq(1, nrow(meta_LQ_sub), 1), sep='_') # hide patient ids
 
-# fwrite(meta_LQ_sub, 'metadata_subsample_LQ.txt', sep='\t') # Export subsampled metadata
+fwrite(meta_LQ_sub, 'metadata_subsample_LQ_no_id.txt', sep='\t') # Export subsampled metadata
+
+

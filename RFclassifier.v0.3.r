@@ -21,7 +21,26 @@ lineage.markers <- read.table('Annotation.lineage.markers.txt', sep = '\t' )
 celltype.markers <- read.table('Annotation.celltype.markers.txt', sep = '\t' )
 
 # High quality FELINE C1 data
-seu_HQ <- qread(file = "seu_HQ.qs", nthreads = numCores)
+seu_HQ <- qread(file = "seu_HQ_no_id3.qs", nthreads = numCores)
+# seu_HQ_rename <- qread(file = "seu_HQ_no_id2.qs", nthreads = numCores)
+
+# # ###########################
+# meta <- seu_HQ@meta.data
+# seu.HQ.counts <- GetAssayData(seu_HQ, assay = "RNA")
+
+# meta_rename <- seu_HQ_rename@meta.data
+# seu.HQ.counts_rename <- GetAssayData(seu_HQ_rename, assay = "RNA")
+
+# dim(meta)
+# dim(meta_rename)
+# all(meta$Lineage == meta_rename$Lineage)
+# all(seu.HQ.counts == seu.HQ.counts_rename)
+# all(rownames(meta_rename) == colnames(seu.HQ.counts_rename))
+# all(rownames(meta) == colnames(seu.HQ.counts))
+
+# # ############################
+
+
 seu_HQ <- subset(x = seu_HQ, subset = Celltype != "Normal epithelial cells")   ## Removes normal epithelial cells. Genes unique to normal epi cells are removed from analysis downstream
 seu_HQ <- subset(seu_HQ, subset = nCount_RNA < 15000 ) # filter out cells with > 15k reads 
 meta <- seu_HQ@meta.data
@@ -41,7 +60,8 @@ red.reads <- function(x, y){
 # x = vector/column/cell in filtered dataframe
 # y = threshold
 bin = function(x, y){
-
+    x[x > 0] <- 1  # convert reads to binary
+    total = sum(x) # number of expressed genes 
     if(total > y){
         pre.index <- which(x == 1) # index of expressed genes 
         x[sample(pre.index , total - y)] <- 0 # randomly convert a number of genes over threshold from 1 -> 0
@@ -71,9 +91,9 @@ nonbin = function(x, y){
 # method <- 'binary', 'non-binary', 'poisson'
 RF_run <- function (class, method) {
 
-    # class <- 'Lineage' # diagnostic 
-    # method <- 'poisson' # diagnostic
-    # i <- 400 # diagnostic 
+    class <- 'Lineage' # diagnostic 
+    method <- 'poisson' # diagnostic
+    i <- 2000 # diagnostic 
 
     # Create export directories 
     experiment <- 'SCN'
@@ -111,21 +131,22 @@ RF_run <- function (class, method) {
     }
 
     # model training
+    print(noquote('Training model ..'))
     class_info <- scn_train(stTrain = stTrain, expTrain = expTrain, 
                     nTopGenes = nGenes, nRand = 50, nTrees = 1000, nTopGenePairs = nGenes*2, 
                     dLevel = class, colName_samp = "Cell")
     # Save model 
     qsave(class_info, file= paste(output.dir, '/Trained_model_for_', class, '_', method,'.qs', sep='' ), nthreads= numCores)
 
-    # # pre-transformation Diagnostics
-    # tot_counts_train <- unlist(mclapply(as.data.frame(expTrain), function (x) sum(x), mc.cores= numCores ))
-    # tot_genes_train <- unlist(mclapply(as.data.frame(expTrain), function (x) sum(x > 0), mc.cores= numCores ))
-    # tot_counts_test <- unlist(mclapply(as.data.frame(expTest), function (x) sum(x), mc.cores= numCores ))
-    # tot_genes_test <- unlist(mclapply(as.data.frame(expTest), function (x) sum(x > 0), mc.cores= numCores ))
-    # pdf('SCN/Train_Test_sets_corr_plot.pdf')
-    #     plot(tot_counts_train, tot_genes_train, main= paste('Training set, n =', length(tot_counts_train))); abline(lm(tot_genes_train ~ tot_counts_train))
-    #     plot(tot_counts_test, tot_genes_test, main= paste('Testing set, n =', length(tot_counts_test))); abline(lm(tot_genes_test ~ tot_counts_test))
-    # dev.off()
+    # pre-transformation Diagnostics
+    tot_counts_train <- unlist(mclapply(as.data.frame(expTrain), function (x) sum(x), mc.cores= numCores ))
+    tot_genes_train <- unlist(mclapply(as.data.frame(expTrain), function (x) sum(x > 0), mc.cores= numCores ))
+    tot_counts_test <- unlist(mclapply(as.data.frame(expTest), function (x) sum(x), mc.cores= numCores ))
+    tot_genes_test <- unlist(mclapply(as.data.frame(expTest), function (x) sum(x > 0), mc.cores= numCores ))
+    pdf('SCN/Train_Test_sets_corr_plot.pdf')
+        plot(tot_counts_train, tot_genes_train, main= paste('Training set, n =', length(tot_counts_train))); abline(lm(tot_genes_train ~ tot_counts_train))
+        plot(tot_counts_test, tot_genes_test, main= paste('Testing set, n =', length(tot_counts_test))); abline(lm(tot_genes_test ~ tot_counts_test))
+    dev.off()
 
     genes <- rownames(expTest)
 
@@ -135,43 +156,35 @@ RF_run <- function (class, method) {
     dist.genes <- data.frame()
     counts <- expTest
 
-    # Untransformed test control 
-    # change the variable names
-    # if (method == 'poisson'){ 
-    #     table_type <- 'reads'
-    #     total.reads <- colSums(control.test)
-    #     total.genes <- mclapply(control.test, function (x) sum(x > 0), mc.cores= numCores)  # convert reads to binary to pull n genes 
-    #     rownames(control.test) <- genes
-    #     total <- total.reads  
-    # }
-
 
     # Transform count matrix by loop over thresholds 
     for (i in threshold_list){
         threshold <- format(i/1000, nsmall=1)
         print(noquote(paste('Processing threshold', threshold)))
        if (method == 'poisson'){ 
-
             table_type <- 'reads'
             transformed <- apply(X = counts, MARGIN = 2, FUN = red.reads, y = i) # run 2nd function to reduce the number of count per cell above threshold. iterates over columns (cells)
             total.reads <- colSums(transformed)
             total.genes <- apply(transformed, MARGIN = 2, function(x) sum(x > 0))  # convert reads to binary to pull n genes 
             rownames(transformed) <- genes
-            total <- total.reads 
+            total <- total.reads # 
+
   
         } else if (method == 'binary'){
             table_type <- 'genes'
             # Transform genes tables 
-            transformed <- as.data.frame(mclapply(counts, FUN = bin, i, mc.cores= numCores)) # binary output
+            transformed <- apply(X = counts, MARGIN = 2, FUN = bin, y = i) # binary output
             total.genes <- colSums(transformed)
             rownames(transformed) <- genes
-            total.reads <- rep(0, ncol(transformed)) # doesn't calculate nReads 
+            transformed.nonbin <- ifelse(transformed == 0, 0, counts)   # convert expressed genes back to their counts
+            total.reads <- colSums(transformed.nonbin)
+            total.genes <- colSums(transformed)
             total <- total.genes
 
         } else if (method == 'non-binary'){ 
             table_type <- 'genes'
             # Transform genes tables 
-            transformed <- as.data.frame(mclapply(counts, FUN = nonbin, i, mc.cores= numCores)) # normal output
+            transformed <- apply(X = counts, MARGIN = 2, FUN = nonbin, y = i) # non-binary output
             total.reads <- colSums(transformed)
             total.genes <- apply(transformed, MARGIN = 2, function(x) sum(x > 0))  # convert reads to binary to pull n genes          
             rownames(transformed) <- genes
@@ -186,8 +199,9 @@ RF_run <- function (class, method) {
         sdat <- summary(total)   
         summStr <- paste(names(sdat), format(sdat, digits = 2), collapse = "; ")
         pdf(paste(path,'.pdf', sep=''), onefile =FALSE)
-        plot(hist(total), xlab = paste('n', table_type, '/cell', sep='') , main = paste('threshold', i, table_type), sub = summStr, col="#1e72d2") 
+            plot(hist(total), xlab = paste('n', table_type, '/cell', sep='') , main = paste('threshold', i, table_type), sub = summStr, col="#1e72d2") 
         dev.off()
+####
 
         expTest <- as.data.frame(transformed[common.genes, ]) # filter test set for common genes 
         # SCN prediction
@@ -196,23 +210,22 @@ RF_run <- function (class, method) {
         tm_heldoutassessment = assess_comm(ct_scores = classRes_val_all, stTrain = stTrain, stQuery = stTest, dLevelSID = "Cell", classTrain = class, classQuery = class, nRand = 0)
         AUC.SCN <- tm_heldoutassessment$AUPRC_w # get AUC value
 
-
         #  model assessment (pROC package)
         ## Remove Rand 
         classRes_val_all <- as.data.frame(classRes_val_all)
         classRes_val_all <- classRes_val_all[!rownames(classRes_val_all) %in% 'rand' ,] # remove 'rand' category 
-        classRes_val_labels <- unlist(apply(classRes_val_all, MARGIN = 2, function(x) { x <- names(which(x == max(x))) })) # generate labels based off highest probabilities (excluding Random)
-        classRes_val_labels <- classRes_val_labels[order(names(classRes_val_labels))] # order predicted labels alphabetically by cell | 
-        classRes_val_labels <- classRes_val_labels[rownames(stTest)] ## Almost randomly, a cell or two are added with a digit after bar code, this step is to remove these extra cells until debugged
-        
-        
+
+        # generate labels based off highest probabilities (excluding Random)
+        classRes_val_labels <- unlist( apply(classRes_val_all, MARGIN = 2, function(x) { x <- names(which(x == max(x))[1]) })  ) # if two labels assigned equal probabilities, 2 prediction per cell generated, to avoid issue, it choose the top prediction
+        classRes_val_labels <- classRes_val_labels[order(names(classRes_val_labels))] # order predicted labels alphabetically by cell |         
+       
         stTest <- stTest[order(rownames(stTest)),  ]    # order true labels alphabetically by cell
         test <- stTest[, class]
         AUC.pROC <- multiclass.roc(as.numeric(factor(test)), as.numeric(factor(classRes_val_labels)))$auc[1]
 
         print(paste('SCN-AUC =', AUC.SCN)) # diagnostic
         print(paste('pROC-AUC =', AUC.pROC)) # diagnostic
-
+####
         ## Plot performance metrics 
         print(noquote('Generating plots'))
         # plots 
@@ -220,9 +233,8 @@ RF_run <- function (class, method) {
                 hist(total.reads, main = paste(table_type, '_', method, '_', class, '_', threshold, sep = ''))         
                 hist(total.genes, main = paste(table_type, '_', method, '_', class, '_', threshold, sep = ''))
                 plot(plot_PRs(tm_heldoutassessment))
-                # plot(plot_attr(classRes = classRes_val_all, sampTab=stTest, nrand=50, dLevel=class, sid="Cell"))
                 plot(plot_metrics(tm_heldoutassessment))
-                if (method == 'floor' | method == 'non-binary') {
+                if (max(total.reads) != 0) {  
                     coeff <- round(cor(total.reads, total.genes), 2)
                     plot(log10(total.reads), log10(total.genes), pch = 20, cex = 0.2,  
                     main = paste('Transformed using', method, 'at threshold', i, table_type), sub = paste("Pearson's coefficient =", coeff), 
@@ -261,13 +273,13 @@ RF_run <- function (class, method) {
     tm_heldoutassessment = assess_comm(ct_scores = classRes_val_all, stTrain = stTrain, stQuery = stTest, dLevelSID = "Cell", classTrain = class, classQuery = class, nRand = 0)
     AUC.SCN <- tm_heldoutassessment$AUPRC_w # get AUC value
 
-    #  model assessment (pROC package)
+    #  model assessment for control (pROC package)
     ## Remove Rand 
     classRes_val_all <- as.data.frame(classRes_val_all)
     classRes_val_all <- classRes_val_all[!rownames(classRes_val_all) %in% 'rand' ,] # remove 'rand' category 
     classRes_val_labels <- unlist(apply(classRes_val_all, MARGIN = 2, function(x) { x <- names(which(x == max(x))) })) # generate labels based off highest probabilities (excluding Random)
     classRes_val_labels <- classRes_val_labels[order(names(classRes_val_labels))] # order predicted labels alphabetically by cell | 
-    classRes_val_labels <- classRes_val_labels[rownames(stTest)] ## Almost randomly, a cell or two are added with a digit after bar code, this step is to remove these extra cells until debugged
+    # classRes_val_labels <- classRes_val_labels[rownames(stTest)] ## Almost randomly, a cell or two are added with a digit after bar code, this step is to remove these extra cells until debugged
     
     stTest <- stTest[order(rownames(stTest)),  ]   # order true labels alphabetically by cell
     test <- stTest[, class]
@@ -298,9 +310,9 @@ RF_run <- function (class, method) {
 # parameters 
 nGenes <- 100 # nTopGenes for model training 
 ncells <- 400 # nCells/class for training & testing dataset
-# threshold_list <- c(200, 400, 600, 800) # thresholds to be tested
+threshold_list <- c(2000, 4000) # thresholds to be tested
 # threshold_list <- c(0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500) # thresholds to be tested
-threshold_list <- c(0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 600, 700, 800, 900, 1000, 1500, 2000, 3000, 4000) # thresholds to be tested
+# threshold_list <- c(0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 600, 700, 800, 900, 1000, 1500, 2000, 3000, 4000) # thresholds to be tested
 
 
 RF_run('Lineage', 'poisson')
