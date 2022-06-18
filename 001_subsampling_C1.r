@@ -81,57 +81,36 @@ HQ_count_batches_merged$'Gene Symbol' <- NULL
 fwrite(HQ_count_batches_merged, 'raw_counts_subsample_HQ.txt', sep='\t') # Export subsampled raw counts. includes cell ids
 fwrite(meta_HQ_sub, 'metadata_subsample_HQ.txt', sep='\t') # Export subsampled metadata. includes cell ids
 
-# construct HQ seurat object
 rownames(meta_HQ_sub) <- meta_HQ_sub$Cell 
-seu_HQ <- CreateSeuratObject(counts= HQ_count_batches_merged, min.features= 0, min.cells = 0, names.delim= "_", meta.data= meta_HQ_sub) 
 
-# order counts and meta cells alphabetically to correct nCount_RNA &  nFeature_RNA
-seu.HQ.counts <- GetAssayData(seu_HQ, assay = "RNA")
-seu.HQ.counts <- seu.HQ.counts[, order(colnames(seu.HQ.counts))] # Edit
-sorted_counts <- seu.HQ.counts
-# sorted_counts <- seu.HQ.counts[, order(colnames(seu.HQ.counts))] # Edit
+## Correct nCount/nFeature & hide patient id ##
+meta <- meta_HQ_sub
+count <- HQ_count_batches_merged
 
-seu_HQ@meta.data <- seu_HQ@meta.data[order(rownames(seu_HQ@meta.data)) ,]
+count <- count[, order(colnames(count))] 
+meta <- meta[order(rownames(meta)),]
 
-all(colnames(sorted_counts) ==  rownames(seu_HQ@meta.data)) # test
+meta$nCount_RNA = colSums(count)  # corrected nCount_RNA
+meta$nFeature_RNA = apply(count, 2, function (x) sum(x > 0))  # corrected nFeature_RNA
 
-seu_HQ@meta.data$nCount_RNA = colSums(sorted_counts)  # corrected nCount_RNA
-seu_HQ@meta.data$nFeature_RNA = apply(sorted_counts, 2, function (x) sum(x > 0))  # corrected nFeature_RNA
+meta <- meta[, c('Cell', 'Percent.Mitochondria', 'Celltype', 'nCount_RNA', 'nFeature_RNA', 'Lineage')]
 
-##  so far so good
+new.names =  paste('Cell', seq(1, ncol(count), 1), sep='_') # generate new cell ids 
+colnames(count) <- new.names 
+rownames(meta) <- new.names 
 
-seu_HQ@meta.data <- seu_HQ@meta.data[, c('Cell', 'Percent.Mitochondria', 'Celltype', 'nCount_RNA', 'nFeature_RNA', 'Lineage')]
-qsave(seu_HQ, file="seu_HQ_no_id1.qs") # export seurat obj
-
-all(colnames(seu.HQ.counts) ==  rownames(seu_HQ@meta.data)) # test
-
-# Hide patient ids 
-seu_HQ_rename <- RenameCells(seu_HQ, new.names =  paste('Cell', seq(1, ncol(sorted_counts), 1), sep='_') ) 
-# ############################
-
-# meta <- seu_HQ@meta.data
-# seu.HQ.counts <- GetAssayData(seu_HQ, assay = "RNA")
-
-# meta_rename <- seu_HQ_rename@meta.data
-# seu.HQ.counts_rename <- GetAssayData(seu_HQ_rename, assay = "RNA")
+meta$Cell <- rownames(meta)
 
 
-# all(meta == meta_rename)
-# all(seu.HQ.counts == seu.HQ.counts_rename)
-
-
-# ############################
-seu_HQ_rename@meta.data$Cell <- rownames(seu_HQ_rename@meta.data)
-
-qsave(seu_HQ_rename, file="seu_HQ_no_id2.qs") # export seurat obj | out of subscript
-
-
-
-meta <- seu_HQ@meta.data
-seu.HQ.counts <- as.data.frame(GetAssayData(seu_HQ, assay = "RNA"))
-
-fwrite(seu.HQ.counts, 'raw_counts_subsample_HQ_no_id.txt', sep='\t') # Export subsampled raw counts. no cell ids
+fwrite(count, 'raw_counts_subsample_HQ_no_id.txt', sep='\t') # Export subsampled raw counts. no cell ids
 fwrite(meta, 'metadata_subsample_HQ_no_id.txt', sep='\t') # Export subsampled metadata. no cell ids
+
+# construct HQ seurat object
+seu_HQ <- CreateSeuratObject(counts= count, min.features= 0, min.cells = 0, names.delim= "_", meta.data= meta) 
+qsave(seu_HQ, file="seu_HQ_no_id.qs") # export seurat obj
+
+
+
 
 
 
@@ -161,22 +140,19 @@ rownames(LQ_count_batches_merged) <- LQ_count_batches_merged$'Gene Symbol'
 LQ_count_batches_merged$'Gene Symbol' <- NULL
 
 # ordering counts and meta cells alphabetically 
-sorted_counts <- LQ_count_batches_merged[, order(colnames(LQ_count_batches_merged))]
-sorted_meta <- meta_LQ_sub[order(meta_LQ_sub$Cell) ,]
+LQ_count_batches_merged <- LQ_count_batches_merged[, order(colnames(LQ_count_batches_merged))]
+meta_LQ_sub <- meta_LQ_sub[order(meta_LQ_sub$Cell) ,]
 
-all(colnames(sorted_counts) ==  sorted_meta$Cell) # test
+all(colnames(LQ_count_batches_merged) ==  meta_LQ_sub$Cell) # test
 
-sorted_meta$nCount_RNA = colSums(sorted_counts)  # corrected nCount_RNA
-sorted_meta$nFeature_RNA = apply(sorted_counts, 2, function (x) sum(x > 0))  # corrected nFeature_RNA
+meta_LQ_sub$nCount_RNA = colSums(LQ_count_batches_merged)  # corrected nCount_RNA
+meta_LQ_sub$nFeature_RNA = apply(LQ_count_batches_merged, 2, function (x) sum(x > 0))  # corrected nFeature_RNA
 
-meta_LQ_sub <- sorted_meta
 
 # Lineage annotations based off hpca annotations 
 meta_LQ_sub[["Lineage"]] <- meta_LQ_sub$hpca
 meta_LQ_sub <- meta_LQ_sub %>% mutate( Lineage = case_when(
         meta_LQ_sub[["hpca"]] == "Epithelial_cells"  ~ 'Epithelial_cells',
-        # meta_LQ_sub[["hpca"]] == "Neurons"  ~ 'Epithelial_cells',
-        # meta_LQ_sub[["hpca"]] == "Chondrocytes"  ~ 'Epithelial_cells',
         meta_LQ_sub[["hpca"]] == "Fibroblasts"  ~ 'Stromal_cells',
         meta_LQ_sub[["hpca"]] == "Smooth_muscle_cells"  ~ 'Stromal_cells',
         meta_LQ_sub[["hpca"]] == "Endothelial_cells"  ~ 'Stromal_cells',
