@@ -22,7 +22,7 @@ numCores
 # celltype.markers <- read.table('Annotation.celltype.markers.txt', sep = '\t' )
 
 # High quality FELINE C1 data
-seu_HQ <- qread(file = "seu_HQ.qs", nthreads = numCores)
+seu_HQ <- qread(file = "seu_HQ_no_id.qs", nthreads = numCores)
 seu_HQ <- subset(seu_HQ, subset = Celltype != "Normal epithelial cells")   ## Removes normal epithelial cells. Genes unique to normal epi cells are removed from analysis downstream
 seu_HQ <- subset(seu_HQ, subset = nCount_RNA < 15000 ) # filter out cells with > 15k reads 
 meta <- seu_HQ@meta.data
@@ -73,9 +73,9 @@ nonbin = function(x, y){
 # method <- 'floor', 'binary', 'non-binary', 'poisson'
 SR_run <- function (class, method) {
 
-    class <- 'Lineage' # diagnostic 
-    method <- 'non-binary' # diagnostic
-    i <- 4000 # diagnostic 
+    # class <- 'Lineage' # diagnostic 
+    # method <- 'non-binary' # diagnostic
+    # i <- 4000 # diagnostic 
 
     # Create export directories 
     experiment <- 'SR'
@@ -229,7 +229,7 @@ SR_run <- function (class, method) {
     avg.genes <- mean(total.genes)
     rownames(control.test) <- genes
     total <- total.reads 
-    
+
     # SingleR prediction
     classRes_val_all = classifySingleR(control.test, class_info, fine.tune = FALSE, prune = FALSE, BPPARAM = MulticoreParam(numCores)) 
 

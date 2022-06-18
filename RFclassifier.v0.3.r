@@ -21,26 +21,7 @@ lineage.markers <- read.table('Annotation.lineage.markers.txt', sep = '\t' )
 celltype.markers <- read.table('Annotation.celltype.markers.txt', sep = '\t' )
 
 # High quality FELINE C1 data
-seu_HQ <- qread(file = "seu_HQ_no_id3.qs", nthreads = numCores)
-# seu_HQ_rename <- qread(file = "seu_HQ_no_id2.qs", nthreads = numCores)
-
-# # ###########################
-# meta <- seu_HQ@meta.data
-# seu.HQ.counts <- GetAssayData(seu_HQ, assay = "RNA")
-
-# meta_rename <- seu_HQ_rename@meta.data
-# seu.HQ.counts_rename <- GetAssayData(seu_HQ_rename, assay = "RNA")
-
-# dim(meta)
-# dim(meta_rename)
-# all(meta$Lineage == meta_rename$Lineage)
-# all(seu.HQ.counts == seu.HQ.counts_rename)
-# all(rownames(meta_rename) == colnames(seu.HQ.counts_rename))
-# all(rownames(meta) == colnames(seu.HQ.counts))
-
-# # ############################
-
-
+seu_HQ <- qread(file = "seu_HQ_no_id.qs", nthreads = numCores)
 seu_HQ <- subset(x = seu_HQ, subset = Celltype != "Normal epithelial cells")   ## Removes normal epithelial cells. Genes unique to normal epi cells are removed from analysis downstream
 seu_HQ <- subset(seu_HQ, subset = nCount_RNA < 15000 ) # filter out cells with > 15k reads 
 meta <- seu_HQ@meta.data
@@ -91,9 +72,9 @@ nonbin = function(x, y){
 # method <- 'binary', 'non-binary', 'poisson'
 RF_run <- function (class, method) {
 
-    class <- 'Lineage' # diagnostic 
-    method <- 'poisson' # diagnostic
-    i <- 2000 # diagnostic 
+    # class <- 'Lineage' # diagnostic 
+    # method <- 'poisson' # diagnostic
+    # i <- 2000 # diagnostic 
 
     # Create export directories 
     experiment <- 'SCN'
@@ -201,7 +182,7 @@ RF_run <- function (class, method) {
         pdf(paste(path,'.pdf', sep=''), onefile =FALSE)
             plot(hist(total), xlab = paste('n', table_type, '/cell', sep='') , main = paste('threshold', i, table_type), sub = summStr, col="#1e72d2") 
         dev.off()
-####
+
 
         expTest <- as.data.frame(transformed[common.genes, ]) # filter test set for common genes 
         # SCN prediction
@@ -225,7 +206,7 @@ RF_run <- function (class, method) {
 
         print(paste('SCN-AUC =', AUC.SCN)) # diagnostic
         print(paste('pROC-AUC =', AUC.pROC)) # diagnostic
-####
+
         ## Plot performance metrics 
         print(noquote('Generating plots'))
         # plots 
@@ -310,9 +291,9 @@ RF_run <- function (class, method) {
 # parameters 
 nGenes <- 100 # nTopGenes for model training 
 ncells <- 400 # nCells/class for training & testing dataset
-threshold_list <- c(2000, 4000) # thresholds to be tested
+# threshold_list <- c(2000, 4000) # thresholds to be tested
 # threshold_list <- c(0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500) # thresholds to be tested
-# threshold_list <- c(0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 600, 700, 800, 900, 1000, 1500, 2000, 3000, 4000) # thresholds to be tested
+threshold_list <- c(0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 600, 700, 800, 900, 1000, 1500, 2000, 3000, 4000) # thresholds to be tested
 
 
 RF_run('Lineage', 'poisson')
@@ -323,5 +304,3 @@ RF_run('Celltype', 'non-binary')
 
 RF_run('Lineage', 'binary')
 RF_run('Celltype', 'binary')
-
-
