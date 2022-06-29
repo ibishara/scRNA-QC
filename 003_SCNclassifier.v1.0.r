@@ -30,7 +30,7 @@ seu.HQ.counts <- GetAssayData(seu_HQ, assay = "RNA")
 # Functions 
 # Reduce reads by multiplying gene counts by a fraction. Uses a poisson distribution where the tolerance level is determined by selected theshold
 # to randomize the fractions. This yields counts with mean around threshold
-# x = vector/column/cell in filtered dataframe
+# x = vector/column/cell in filtered dataframe (test set)
 # y = threshold
 red.reads <- function(x, y){
     x <- round(x * rpois(n=length(x), lambda=y/sum(x)))

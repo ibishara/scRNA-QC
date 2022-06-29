@@ -269,9 +269,6 @@ threshold_list <- c(0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 600, 700
 SR_run('Lineage', 'poisson')
 SR_run('Celltype', 'poisson')
 
-
-
-
 SR_run('Lineage', 'non-binary')
 SR_run('Celltype', 'non-binary')
 
