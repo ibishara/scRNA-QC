@@ -1,1 +1,1 @@
-# SYSTEMATIC ASSESSMENT OF READS THRESHOLD TO UNCOVER TUMOR CELL DIVERSITY USING SINGLE CELL RNA SEQUENCING
+# A machine learning framework for reads threshold optimization and accurate classification of cell types using scRNA-seq
