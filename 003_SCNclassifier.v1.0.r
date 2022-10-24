@@ -68,36 +68,37 @@ nonbin = function(x, y){
 
 # This function trains a classifier based off method, then loop over different thresholds to produce AUC values 
 # Arguments: 
-# class <- 'Celltype' , 'Lineage'
+# level <- 'Celltype' , 'Lineage'
 # method <- 'binary', 'non-binary', 'poisson'
-RF_run <- function (class, method) {
+RF_run <- function (level, method) {
 
-    # class <- 'Lineage' # diagnostic 
+    # level <- 'Lineage' # diagnostic 
     # method <- 'poisson' # diagnostic
     # i <- 2000 # diagnostic 
 
     # Create export directories 
     experiment <- 'SCN'
-    output.dir <- paste(experiment, method, class, sep='/')
+    output.dir <- paste(experiment, method, level, sep='/')
     dir.create(output.dir, recursive = TRUE)
     sub.dir.perf <- paste(output.dir, '/model_performance', sep='')
     dir.create(sub.dir.perf)
     sub.dir.down <- paste(output.dir, '/downsample', sep='')
     dir.create(sub.dir.down)
 
-    # Select marker genes identified by Seurat::FindAllMarkers() for class determination 
-    if ( class == 'Lineage'){ 
+    # Select marker genes identified by Seurat::FindAllMarkers() for level determination 
+    if ( level == 'Lineage'){ 
         common.genes <- intersect(rownames(seu.HQ.counts), lineage.markers$gene)
-    } else if ( class == 'Celltype') {
+    } else if ( level == 'Celltype') {
         common.genes <- intersect(rownames(seu.HQ.counts), celltype.markers$gene)
         }
     
     set.seed(100)
     # Split 50 / 50 
-    stList = splitCommon(sampTab = meta, ncells = ncells, dLevel = class) # At certain thresholds, there's not enough remaining cells for training 
+    stList = splitCommon(sampTab = meta, ncells = ncells, dLevel = level) # At certain thresholds, there's not enough remaining cells for training 
     stSub = stList[[1]]
-    stTrain = stSub[sample(nrow(stSub), round(nrow(stSub)/2)), ]
-    stTest = stSub[! rownames(stSub) %in% rownames(stTrain) ,]
+    stTrain = stSub[sample(nrow(stSub), round(nrow(stSub)/2)), ] # splits training set
+    stTest = stSub[! rownames(stSub) %in% rownames(stTrain) ,]# splits test set (make sure not in training)
+
 
     expTrain.full = seu.HQ.counts[, rownames(stTrain)]
     expTrain <- expTrain.full[common.genes, ]
@@ -113,11 +114,11 @@ RF_run <- function (class, method) {
 
     # model training
     print(noquote('Training model ..'))
-    class_info <- scn_train(stTrain = stTrain, expTrain = expTrain, 
+    level_info <- scn_train(stTrain = stTrain, expTrain = expTrain, 
                     nTopGenes = nGenes, nRand = 50, nTrees = 1000, nTopGenePairs = nGenes*2, 
-                    dLevel = class, colName_samp = "Cell")
+                    dLevel = level, colName_samp = "Cell")
     # Save model 
-    qsave(class_info, file= paste(output.dir, '/Trained_model_for_', class, '_', method,'.qs', sep='' ), nthreads= numCores)
+    qsave(level_info, file= paste(output.dir, '/Trained_model_for_', level, '_', method,'.qs', sep='' ), nthreads= numCores)
 
     # pre-transformation Diagnostics
     tot_counts_train <- unlist(mclapply(as.data.frame(expTrain), function (x) sum(x), mc.cores= numCores ))
@@ -173,7 +174,7 @@ RF_run <- function (class, method) {
         }
         
         # export transformed data
-        path <- paste(sub.dir.down, '/', table_type, '_down_', threshold, '_', class, sep='')
+        path <- paste(sub.dir.down, '/', table_type, '_down_', threshold, '_', level, sep='')
         fwrite(transformed, paste(path, '.txt', sep=''), sep='\t', nThread = numCores, row.names = TRUE)
 
         # export hist and stats 
@@ -186,23 +187,23 @@ RF_run <- function (class, method) {
 
         expTest <- as.data.frame(transformed[common.genes, ]) # filter test set for common genes 
         # SCN prediction
-        classRes_val_all = scn_predict(cnProc=class_info[['cnProc']], expDat = expTest, nrand = 0)  # Removed rand # number of training and validation cells must be equal. genes in model must be in validation set. | issue: some dropped genes lead to error
+        levelRes_val_all = scn_predict(cnProc=level_info[['cnProc']], expDat = expTest, nrand = 0)  # Removed rand # number of training and validation cells must be equal. genes in model must be in validation set. | issue: some dropped genes lead to error
         # SCN model assessment | remove for deployment
-        tm_heldoutassessment = assess_comm(ct_scores = classRes_val_all, stTrain = stTrain, stQuery = stTest, dLevelSID = "Cell", classTrain = class, classQuery = class, nRand = 0)
+        tm_heldoutassessment = assess_comm(ct_scores = levelRes_val_all, stTrain = stTrain, stQuery = stTest, dLevelSID = "Cell", classTrain = level, classQuery = level, nRand = 0)
         AUC.SCN <- tm_heldoutassessment$AUPRC_w # get AUC value
 
         #  model assessment (pROC package)
         ## Remove Rand 
-        classRes_val_all <- as.data.frame(classRes_val_all)
-        classRes_val_all <- classRes_val_all[!rownames(classRes_val_all) %in% 'rand' ,] # remove 'rand' category 
+        levelRes_val_all <- as.data.frame(levelRes_val_all)
+        levelRes_val_all <- levelRes_val_all[!rownames(levelRes_val_all) %in% 'rand' ,] # remove 'rand' category 
 
         # generate labels based off highest probabilities (excluding Random)
-        classRes_val_labels <- unlist( apply(classRes_val_all, MARGIN = 2, function(x) { x <- names(which(x == max(x))[1]) })  ) # if two labels assigned equal probabilities, 2 prediction per cell generated, to avoid issue, it choose the top prediction
-        classRes_val_labels <- classRes_val_labels[order(names(classRes_val_labels))] # order predicted labels alphabetically by cell |         
+        levelRes_val_labels <- unlist( apply(levelRes_val_all, MARGIN = 2, function(x) { x <- names(which(x == max(x))[1]) })  ) # if two labels assigned equal probabilities, 2 prediction per cell generated, to avoid issue, it choose the top prediction
+        levelRes_val_labels <- levelRes_val_labels[order(names(levelRes_val_labels))] # order predicted labels alphabetically by cell |         
        
         stTest <- stTest[order(rownames(stTest)),  ]    # order true labels alphabetically by cell
-        test <- stTest[, class]
-        AUC.pROC <- multiclass.roc(as.numeric(factor(test)), as.numeric(factor(classRes_val_labels)))$auc[1]
+        test <- stTest[, level]
+        AUC.pROC <- multiclass.roc(as.numeric(factor(test)), as.numeric(factor(levelRes_val_labels)))$auc[1]
 
         print(paste('SCN-AUC =', AUC.SCN)) # diagnostic
         print(paste('pROC-AUC =', AUC.pROC)) # diagnostic
@@ -210,9 +211,9 @@ RF_run <- function (class, method) {
         ## Plot performance metrics 
         print(noquote('Generating plots'))
         # plots 
-        pdf(paste(sub.dir.perf, '/', method, '_', class, '_', threshold, '.pdf', sep = ''))
-                hist(total.reads, main = paste(table_type, '_', method, '_', class, '_', threshold, sep = ''))         
-                hist(total.genes, main = paste(table_type, '_', method, '_', class, '_', threshold, sep = ''))
+        pdf(paste(sub.dir.perf, '/', method, '_', level, '_', threshold, '.pdf', sep = ''))
+                hist(total.reads, main = paste(table_type, '_', method, '_', level, '_', threshold, sep = ''))         
+                hist(total.genes, main = paste(table_type, '_', method, '_', level, '_', threshold, sep = ''))
                 plot(plot_PRs(tm_heldoutassessment))
                 plot(plot_metrics(tm_heldoutassessment))
                 if (max(total.reads) != 0) {  
@@ -225,7 +226,7 @@ RF_run <- function (class, method) {
         avg.reads <- mean(total.reads)
         avg.genes <- mean(total.genes)
 
-        summ <- c(class, table_type, threshold, method, AUC.SCN, AUC.pROC, ncells, nGenes, round(avg.reads), round(avg.genes)) 
+        summ <- c(level, table_type, threshold, method, AUC.SCN, AUC.pROC, ncells, nGenes, round(avg.reads), round(avg.genes)) 
         summ.out <- rbind(summ.out, summ)
 
         names(total.reads) <- NULL
@@ -249,24 +250,23 @@ RF_run <- function (class, method) {
     total <- total.reads 
     # SCN prediction
     control.test <- control.test[common.genes, ] # filter for common genes 
-    classRes_val_all = scn_predict(cnProc=class_info[['cnProc']], expDat = control.test, nrand = 0) 
+    levelRes_val_all = scn_predict(cnProc=level_info[['cnProc']], expDat = control.test, nrand = 0) 
     # SCN model assessment | remove for deployment
-    tm_heldoutassessment = assess_comm(ct_scores = classRes_val_all, stTrain = stTrain, stQuery = stTest, dLevelSID = "Cell", classTrain = class, classQuery = class, nRand = 0)
+    tm_heldoutassessment = assess_comm(ct_scores = levelRes_val_all, stTrain = stTrain, stQuery = stTest, dLevelSID = "Cell", classTrain = level, classQuery = level, nRand = 0)
     AUC.SCN <- tm_heldoutassessment$AUPRC_w # get AUC value
 
     #  model assessment for control (pROC package)
     ## Remove Rand 
-    classRes_val_all <- as.data.frame(classRes_val_all)
-    classRes_val_all <- classRes_val_all[!rownames(classRes_val_all) %in% 'rand' ,] # remove 'rand' category 
-    classRes_val_labels <- unlist(apply(classRes_val_all, MARGIN = 2, function(x) { x <- names(which(x == max(x))) })) # generate labels based off highest probabilities (excluding Random)
-    classRes_val_labels <- classRes_val_labels[order(names(classRes_val_labels))] # order predicted labels alphabetically by cell | 
-    # classRes_val_labels <- classRes_val_labels[rownames(stTest)] ## Almost randomly, a cell or two are added with a digit after bar code, this step is to remove these extra cells until debugged
+    levelRes_val_all <- as.data.frame(levelRes_val_all)
+    levelRes_val_all <- levelRes_val_all[!rownames(levelRes_val_all) %in% 'rand' ,] # remove 'rand' category 
+    levelRes_val_labels <- unlist(apply(levelRes_val_all, MARGIN = 2, function(x) { x <- names(which(x == max(x)))[1] })) # generate labels based off highest probabilities (excluding Random)
+    levelRes_val_labels <- levelRes_val_labels[order(names(levelRes_val_labels))] # order predicted labels alphabetically by cell | 
     
     stTest <- stTest[order(rownames(stTest)),  ]   # order true labels alphabetically by cell
-    test <- stTest[, class]
-    AUC.pROC <- multiclass.roc(as.numeric(factor(test)), as.numeric(factor(classRes_val_labels)))$auc[1]
+    test <- stTest[, level]
+    AUC.pROC <- multiclass.roc(as.numeric(factor(test)), as.numeric(factor(levelRes_val_labels)))$auc[1]
 
-    summ <- c(class, table_type, threshold, method, AUC.SCN, AUC.pROC, ncells, nGenes, round(avg.reads), round(avg.genes)) 
+    summ <- c(level, table_type, threshold, method, AUC.SCN, AUC.pROC, ncells, nGenes, round(avg.reads), round(avg.genes)) 
     summ.out <- rbind(summ.out, summ)
 
     names(total.reads) <- NULL
@@ -280,8 +280,8 @@ RF_run <- function (class, method) {
 
 
     print(noquote('Generating summary table'))
-    colnames(summ.out) <- c( 'class', 'source', 'threshold','method', 'AUC_SCN', 'AUC_pROC', 'VnCells', 'nTopGenes', 'Avg.Reads', 'Avg.Genes')
-    write.table(summ.out, paste(getwd() , '/', experiment, '_Performance_summary_', method, '_', class, '.txt' , sep=''), col.names = TRUE, sep = '\t') 
+    colnames(summ.out) <- c( 'level', 'source', 'threshold','method', 'AUC_SCN', 'AUC_pROC', 'VnCells', 'nTopGenes', 'Avg.Reads', 'Avg.Genes')
+    write.table(summ.out, paste(getwd() , '/', experiment, '_Performance_summary_', method, '_', level, '.txt' , sep=''), col.names = TRUE, sep = '\t') 
     # export the reads and genes ditribution at each threshold 
     print(noquote('Generating distribution tables'))
     write.table(dist.reads, paste(getwd() , '/', experiment, '_reads_distribution_', method, '.txt' , sep=''), col.names = TRUE, sep = '\t') # Lineage and celltype outputs are identical. They're re-exported for validation only. 
@@ -290,7 +290,7 @@ RF_run <- function (class, method) {
 
 # parameters 
 nGenes <- 100 # nTopGenes for model training 
-ncells <- 400 # nCells/class for training & testing dataset
+ncells <- 400 # nCells/level for training & testing dataset
 # threshold_list <- c(2000, 4000) # thresholds to be tested
 # threshold_list <- c(0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500) # thresholds to be tested
 threshold_list <- c(0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 600, 700, 800, 900, 1000, 1500, 2000, 3000, 4000) # thresholds to be tested

@@ -69,17 +69,17 @@ nonbin = function(x, y){
 
 # This function trains a classifier based off method, then loop over different thresholds to produce AUC values 
 # Arguments: 
-# class <- 'Celltype' , 'Lineage'
+# level <- 'Celltype' , 'Lineage'
 # method <- 'floor', 'binary', 'non-binary', 'poisson'
-SR_run <- function (class, method) {
+SR_run <- function (level, method) {
 
-    # class <- 'Lineage' # diagnostic 
+    # level <- 'Lineage' # diagnostic 
     # method <- 'non-binary' # diagnostic
     # i <- 4000 # diagnostic 
 
     # Create export directories 
     experiment <- 'SR'
-    output.dir <- paste(experiment, method, class, sep='/')
+    output.dir <- paste(experiment, method, level, sep='/')
     dir.create(output.dir, recursive = TRUE)
     sub.dir.perf <- paste(output.dir, '/model_performance', sep='')
     dir.create(sub.dir.perf)
@@ -90,7 +90,7 @@ SR_run <- function (class, method) {
     set.seed(100)
     
     # Split 50 / 50 
-    stList = splitCommon(sampTab = meta, ncells = ncells, dLevel = class) # At certain thresholds, there's not enough remaining cells for training 
+    stList = splitCommon(sampTab = meta, ncells = ncells, dLevel = level) # At certain thresholds, there's not enough remaining cells for training 
     stSub = stList[[1]]
     stTrain = stSub[sample(nrow(stSub), round(nrow(stSub)/2)), ]
     stTest = stSub[! rownames(stSub) %in% rownames(stTrain) ,]
@@ -102,18 +102,18 @@ SR_run <- function (class, method) {
 
     if (method == 'binary'){
         expTrain[expTrain > 0] <- 1 # transform training counts to binary
-       # expTest[expTest > 0] <- 1 # transform testing counts to binary
+##BUG?##### expTest[expTest > 0] <- 1 # transform testing counts to binary ####  confirm this is not needed!! 
     }
 
     # model training
-    if ( class == 'Lineage'){ 
-        class_info <- trainSingleR(expTrain, stTrain$Lineage)
-    } else if ( class == 'Celltype') {
-        class_info <- trainSingleR(expTrain, stTrain$Celltype)
+    if ( level == 'Lineage'){ 
+        level_info <- trainSingleR(expTrain, stTrain$Lineage)
+    } else if ( level == 'Celltype') {
+        level_info <- trainSingleR(expTrain, stTrain$Celltype)
     }
 
     # Save model 
-    qsave(class_info, file= paste(output.dir, '/Trained_model_for_', class, '_', method,'.qs', sep='' ), nthreads= numCores)
+    qsave(level_info, file= paste(output.dir, '/Trained_model_for_', level, '_', method,'.qs', sep='' ), nthreads= numCores)
 
     # pre-transformation Diagnostics
     tot_counts_train <- unlist(mclapply(as.data.frame(expTrain), function (x) sum(x), mc.cores= numCores ))
@@ -168,15 +168,15 @@ SR_run <- function (class, method) {
         }
     
     # export transformed data
-    path <- paste(sub.dir.down, '/', table_type, '_down_', threshold, '_', class, sep='')
+    path <- paste(sub.dir.down, '/', table_type, '_down_', threshold, '_', level, sep='')
     fwrite(transformed, paste(path, '.txt', sep=''), sep='\t', nThread = numCores, row.names = TRUE)
 
     ## Plot performance metrics 
     print(noquote('Generating plots'))
     # plots 
-    pdf(paste(sub.dir.perf, '/', method, '_', class, '_', threshold, '.pdf', sep = ''))
-            hist(total.reads, main = paste(table_type, '_', method, '_', class, '_', threshold, sep = ''))         
-            hist(total.genes, main = paste(table_type, '_', method, '_', class, '_', threshold, sep = ''))
+    pdf(paste(sub.dir.perf, '/', method, '_', level, '_', threshold, '.pdf', sep = ''))
+            hist(total.reads, main = paste(table_type, '_', method, '_', level, '_', threshold, sep = ''))         
+            hist(total.genes, main = paste(table_type, '_', method, '_', level, '_', threshold, sep = ''))
             if (max(total.reads) != 0) {  
                 coeff <- round(cor(total.reads, total.genes), 2)
                 plot(log10(total.reads), log10(total.genes), pch = 20, cex = 0.2,  
@@ -195,19 +195,19 @@ SR_run <- function (class, method) {
     expTest <- as.data.frame(transformed) # run on all genes 
 
     # SingleR prediction
-    classRes_val_all = classifySingleR(expTest, class_info, fine.tune = FALSE, prune = FALSE, BPPARAM = MulticoreParam(numCores)) 
+    levelRes_val_all = classifySingleR(expTest, level_info, fine.tune = FALSE, prune = FALSE, BPPARAM = MulticoreParam(numCores)) 
 
     # SingleR model evaluation 
     stTest <- stTest[ order(rownames(stTest)), ]    # order true labels alphabetically by cell
-    classRes_val_all <- classRes_val_all[order(rownames(classRes_val_all)),] # order predicted labels alphabetically by cell 
-    AUC.pROC <- multiclass.roc(as.numeric(factor(stTest[, class])), as.numeric(factor(classRes_val_all$labels)))$auc[1]
+    levelRes_val_all <- levelRes_val_all[order(rownames(levelRes_val_all)),] # order predicted labels alphabetically by cell 
+    AUC.pROC <- multiclass.roc(as.numeric(factor(stTest[, level])), as.numeric(factor(levelRes_val_all$labels)))$auc[1]
 
     print(paste('pROC-AUC =', AUC.pROC))
 
     avg.reads <- mean(total.reads)
     avg.genes <- mean(total.genes)
 
-    summ <- c(class, table_type, threshold, method, AUC.pROC, ncells, round(avg.reads), round(avg.genes)) 
+    summ <- c(level, table_type, threshold, method, AUC.pROC, ncells, round(avg.reads), round(avg.genes)) 
     summ.out <- rbind(summ.out, summ)
 
     names(total.reads) <- NULL
@@ -231,15 +231,15 @@ SR_run <- function (class, method) {
     total <- total.reads 
 
     # SingleR prediction
-    classRes_val_all = classifySingleR(control.test, class_info, fine.tune = FALSE, prune = FALSE, BPPARAM = MulticoreParam(numCores)) 
+    levelRes_val_all = classifySingleR(control.test, level_info, fine.tune = FALSE, prune = FALSE, BPPARAM = MulticoreParam(numCores)) 
 
     # model assessment (pROC package)
     stTest <- stTest[ order(rownames(stTest)), ]    # order true labels alphabetically by cell
-    classRes_val_all <- classRes_val_all[order(rownames(classRes_val_all)),] # order predicted labels alphabetically by cell 
-    AUC.pROC <- multiclass.roc(as.numeric(factor(stTest[, class])), as.numeric(factor(classRes_val_all$labels)))$auc[1]
+    levelRes_val_all <- levelRes_val_all[order(rownames(levelRes_val_all)),] # order predicted labels alphabetically by cell 
+    AUC.pROC <- multiclass.roc(as.numeric(factor(stTest[, level])), as.numeric(factor(levelRes_val_all$labels)))$auc[1]
     print(paste('pROC-AUC =', AUC.pROC))
 
-    summ <- c(class, table_type, threshold, method, AUC.pROC, ncells, round(avg.reads), round(avg.genes)) 
+    summ <- c(level, table_type, threshold, method, AUC.pROC, ncells, round(avg.reads), round(avg.genes)) 
     summ.out <- rbind(summ.out, summ)
 
     names(total.reads) <- NULL
@@ -253,8 +253,8 @@ SR_run <- function (class, method) {
 
 
     print(noquote('Generating summary table'))
-    colnames(summ.out) <- c( 'class', 'source', 'threshold','method', 'AUC_pROC', 'nCells', 'Avg.Reads', 'Avg.Genes')
-    write.table(summ.out, paste(getwd() , '/', experiment, '_Performance_summary_', method, '_', class, '.txt' , sep=''), col.names = TRUE, sep = '\t') 
+    colnames(summ.out) <- c( 'level', 'source', 'threshold','method', 'AUC_pROC', 'nCells', 'Avg.Reads', 'Avg.Genes')
+    write.table(summ.out, paste(getwd() , '/', experiment, '_Performance_summary_', method, '_', level, '.txt' , sep=''), col.names = TRUE, sep = '\t') 
     # export the reads and genes ditribution at each threshold 
     print(noquote('Generating distribution tables'))
     write.table(dist.reads, paste(getwd() , '/', experiment, '_reads_distribution_', method, '.txt' , sep=''), col.names = TRUE, sep = '\t') # Lineage and celltype outputs are identical. They're re-exported for validation only. 
@@ -262,7 +262,7 @@ SR_run <- function (class, method) {
 }
 
 # parameters 
-ncells <- 400 # nCells/class for training & testing dataset
+ncells <- 400 # nCells/level for training & testing dataset
 threshold_list <- c(0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 600, 700, 800, 900, 1000, 1500, 2000, 3000, 4000) # thresholds to be tested
 
 
