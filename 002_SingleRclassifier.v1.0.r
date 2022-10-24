@@ -1,7 +1,7 @@
-# This script trains a model on HQ cells using lineage specific genes identified via FindAllMarkers 
-# The model is then used to predict lineage annotations on LQ dataset
-# parallelization require base R to run efficiently. Radian or Jupyter are not optimal and may flood memory
-# splitCommon raises the following error when a cell type has < 3 cells: "Error in sample.int(length(x), size, replace, prob) : invalid 'size' argument"
+# This script trains SingleR classifier on high quality (HQ) cells using all available genes
+# The model is then used to predict lineage & cell type annotations on the low quality (LQ) cells
+# The output is AUROCC as a performance metric for different transformations e.g., 'binary', 'poisson'
+# parallelization require base R to run efficiently. Radian or Jupyter are not optimal and may lead to memory error
 
 # packages
 library(Seurat)
@@ -70,13 +70,15 @@ nonbin = function(x, y){
 # This function trains a classifier based off method, then loop over different thresholds to produce AUC values 
 # Arguments: 
 # level <- 'Celltype' , 'Lineage'
-# method <- 'floor', 'binary', 'non-binary', 'poisson'
+# method <- 'binary', 'non-binary', 'poisson'
 SR_run <- function (level, method) {
 
-    # level <- 'Lineage' # diagnostic 
-    # method <- 'non-binary' # diagnostic
-    # i <- 4000 # diagnostic 
-
+    ############### Diagnostic only ############
+    # level <- 'Lineage' 
+    # method <- 'non-binary' 
+    # i <- 4000 
+    ############################################
+    
     # Create export directories 
     experiment <- 'SR'
     output.dir <- paste(experiment, method, level, sep='/')

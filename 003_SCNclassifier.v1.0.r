@@ -1,7 +1,6 @@
-# This script trains a model on HQ cells using lineage specific genes identified via FindAllMarkers 
-# The model is then used to predict lineage annotations on LQ dataset
-# parallelization require base R to run efficiently. Radian or Jupyter are not optimal and may flood memory
-# splitCommon raises the following error when a cell type has < 3 cells: "Error in sample.int(length(x), size, replace, prob) : invalid 'size' argument"
+# This script trains SingleCellNet classifier on high quality (HQ) cells using marker genes identified using 001_marker_genes.r
+# The model is then used to predict lineage & cell type annotations on the low quality (LQ) cells
+# parallelization require base R to run efficiently. Radian or Jupyter are not optimal and may lead to memory error
 
 # packages
 library(Seurat)
@@ -72,10 +71,12 @@ nonbin = function(x, y){
 # method <- 'binary', 'non-binary', 'poisson'
 RF_run <- function (level, method) {
 
-    # level <- 'Lineage' # diagnostic 
-    # method <- 'poisson' # diagnostic
-    # i <- 2000 # diagnostic 
-
+    ############### Diagnostic only ############
+    # level <- 'Lineage' 
+    # method <- 'non-binary' 
+    # i <- 4000 
+    ############################################
+    
     # Create export directories 
     experiment <- 'SCN'
     output.dir <- paste(experiment, method, level, sep='/')
