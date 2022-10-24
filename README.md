@@ -6,7 +6,7 @@ This repository contains all script and data used to produce figures in the 2022
 ### Contents:
 - 001_marker_genes.r --    
 - 002_SingleRclassifier.v1.0.r -- 
-- 003_SCNclassifier.v1.0.r -- Train the SingleCellNet classifier using the HQ dataset and outputs model performance metrics.
+- 003_SCNclassifier.v1.0.r -- 
 - 004_figures.ipynb -- Produce paper figures using the output of the above.
 - seu_HQ_no_id.qs -- Seurat object containing high quality cells.
 - metadata_subsample_LQ_no_id.txt -- Metadata of low quality cells used in Figure 2. 
@@ -17,9 +17,18 @@ The script has been throughly annotated to describe its functions.
 Working dirctory paths can be modified as needed. All required sub-directories would be automatically created.
 
 ### Analysis pipeline
-1. 001_marker_genes.r  -->  Identify marker genes for lineage and cell type levels. 
+1. 001_marker_genes.r  -->  Identify marker genes for lineage and cell type levels for SingleCellNet classifier. 
    - Output (included in the repository): 
      - Annotation.celltype.markers.txt
      - Annotation.lineage.markers.txt
-2. SingleR or SingleCellNet classifiers:
+2. Run SingleR and/or SingleCellNet classifiers:
    - 002_SingleRclassifier.v1.0.r  -->  Train the SingleR classifier using the HQ dataset and outputs model performance metrics.
+   - 003_SCNclassifier.v1.0.r  -->  Train the SingleCellNet classifier using the HQ dataset and outputs model performance metrics.
+     - Output: SR/SCN directory containng performance, UMI, gene distribution metrics. Used as input to generate plots. 
+3. 004_figures.ipynb  -->  Generate plots. Jupyter notebook cells are annotated by figure. 
+   - Output: Plots in PDF format. Can be modified to show plots directly in the notebook.
+
+### Recommended citation
+
+### Contact us
+
