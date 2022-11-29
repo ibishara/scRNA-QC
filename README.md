@@ -4,9 +4,9 @@ This repository contains all script and data used to produce figures in the 2022
 
 
 ### Contents:
-- 001_marker_genes.r    
-- 002_SingleRclassifier.v1.0.r  
-- 003_SCNclassifier.v1.0.r 
+- 001_marker_genes.r -- Identify marker genes
+- 002_SingleRclassifier.v1.0.r -- SingleR classifier run
+- 003_SCNclassifier.v1.0.r -- Single Cell Net classifier run
 - 004_figures.ipynb -- Produce paper figures using the output of the above.
 - seu_HQ_no_id.qs -- Seurat object containing high quality cells.
 - metadata_subsample_LQ_no_id.txt -- Metadata of low quality cells used in Figure 2. 
