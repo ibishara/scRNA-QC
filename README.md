@@ -30,5 +30,5 @@ Working dirctory paths can be modified as needed. All required sub-directories w
 
 
 ### Contact us: 
-- ibishara@coh.org
+ibishara@coh.org
 
