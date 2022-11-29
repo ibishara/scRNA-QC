@@ -29,5 +29,6 @@ Working dirctory paths can be modified as needed. All required sub-directories w
    - Output: Plots in PDF format. Can be modified to show plots directly in the notebook.
 
 
-### Contact us: ibishara@coh.org
+### Contact us: 
+- ibishara@coh.org
 
