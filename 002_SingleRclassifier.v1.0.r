@@ -91,12 +91,6 @@ nonbin = function(x, y){
 # method <- 'binary', 'non-binary', 'poisson'
 SR_run <- function (level, method) {
 
-    ############### Diagnostic only ############
-    # level <- 'Celltype' 
-    # method <- 'poisson' 
-    # i <- 4000 
-    ############################################
-    
     # Create export directories 
     experiment <- 'SR'
     output.dir <- paste(dataset, experiment, method, level, sep='/')
@@ -134,16 +128,6 @@ SR_run <- function (level, method) {
 
     # Save model 
     qsave(level_info, file= paste(output.dir, '/Trained_model_for_', level, '_', method,'.qs', sep='' ), nthreads= numCores)
-
-    # # pre-transformation Diagnostics
-    # tot_counts_train <- unlist(mclapply(as.data.frame(expTrain), function (x) sum(x), mc.cores= numCores ))
-    # tot_genes_train <- unlist(mclapply(as.data.frame(expTrain), function (x) sum(x > 0), mc.cores= numCores ))
-    # tot_counts_test <- unlist(mclapply(as.data.frame(expTest), function (x) sum(x), mc.cores= numCores ))
-    # tot_genes_test <- unlist(mclapply(as.data.frame(expTest), function (x) sum(x > 0), mc.cores= numCores ))
-    # pdf(paste0(experiment,'/Train_Test_sets_corr_plot.pdf'))
-    #     plot(tot_counts_train, tot_genes_train, main= paste('Training set, n =', length(tot_counts_train))); abline(lm(tot_genes_train ~ tot_counts_train))
-    #     plot(tot_counts_test, tot_genes_test, main= paste('Testing set, n =', length(tot_counts_test))); abline(lm(tot_genes_test ~ tot_counts_test))
-    # dev.off()
 
     genes <- rownames(expTest)
 
@@ -191,27 +175,12 @@ SR_run <- function (level, method) {
     path <- paste(sub.dir.down, '/', table_type, '_down_', threshold, '_', level, sep='')
     fwrite(transformed, paste(path, '.txt', sep=''), sep='\t', nThread = numCores, row.names = TRUE)
 
-    # ## Plot performance metrics - Diagnostic only
-    # cat('Generating plots', "\n")
-    # # plots 
-    # pdf(paste(sub.dir.perf, '/', method, '_', level, '_', threshold, '.pdf', sep = ''))
-    #         hist(total.UMI, main = paste(table_type, '_', method, '_', level, '_', threshold, sep = ''))         
-    #         hist(total.genes, main = paste(table_type, '_', method, '_', level, '_', threshold, sep = ''))
-    #         if (max(total.UMI) != 0) {  
-    #             coeff <- round(cor(total.UMI, total.genes), 2)
-    #             plot(log10(total.UMI), log10(total.genes), pch = 20, cex = 0.2,  
-    #             main = paste('Transformed using', method, 'at threshold', i, table_type), sub = paste("Pearson's coefficient =", coeff), 
-    #             xlab = "log10 number of UMI", ylab = "log10 number of unique genes" )}
-    # dev.off()
-
     # export hist and stats 
     sdat <- summary(total)   
     summStr <- paste(names(sdat), format(sdat, digits = 2), collapse = "; ")
     pdf(paste(path,'.pdf', sep=''), onefile =FALSE)
     plot(hist(total), xlab = paste('n', table_type, '/cell', sep='') , main = paste('threshold', i, table_type), sub = summStr, col="#1e72d2") 
     dev.off()
-
-
     expTest <- as.data.frame(transformed) # run on all genes 
 
     # SingleR prediction

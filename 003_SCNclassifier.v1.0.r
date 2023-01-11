@@ -99,12 +99,6 @@ nonbin = function(x, y){
 # method <- 'binary', 'non-binary', 'poisson'
 SCN_run <- function (level, method) {
 
-    ############### Diagnostic only ############
-    # level <- 'Lineage' 
-    # method <- 'non-binary' 
-    # i <- 4000 
-    ############################################
-    
     # Create export directories 
     experiment <- 'SCN'
     output.dir <- paste(dataset, experiment, method, level, sep='/')
@@ -149,16 +143,6 @@ SCN_run <- function (level, method) {
     # Save model 
     qsave(level_info, file= paste(output.dir, '/Trained_model_for_', level, '_', method,'.qs', sep='' ), nthreads= numCores)
 
-    # # pre-transformation Diagnostics
-    # tot_counts_train <- unlist(mclapply(as.data.frame(expTrain), function (x) sum(x), mc.cores= numCores ))
-    # tot_genes_train <- unlist(mclapply(as.data.frame(expTrain), function (x) sum(x > 0), mc.cores= numCores ))
-    # tot_counts_test <- unlist(mclapply(as.data.frame(expTest), function (x) sum(x), mc.cores= numCores ))
-    # tot_genes_test <- unlist(mclapply(as.data.frame(expTest), function (x) sum(x > 0), mc.cores= numCores ))
-    # pdf('SCN/Train_Test_sets_corr_plot.pdf')
-    #     plot(tot_counts_train, tot_genes_train, main= paste('Training set, n =', length(tot_counts_train))); abline(lm(tot_genes_train ~ tot_counts_train))
-    #     plot(tot_counts_test, tot_genes_test, main= paste('Testing set, n =', length(tot_counts_test))); abline(lm(tot_genes_test ~ tot_counts_test))
-    # dev.off()
-
     genes <- rownames(expTest)
 
     # create empty summary and distribution dataframes 
@@ -166,7 +150,6 @@ SCN_run <- function (level, method) {
     dist.UMI <- data.frame() # for UMI distribution plots 
     dist.genes <- data.frame() # for gene distribution plots 
     counts <- expTest  # variable 'counts' now contains test count matrix - all genes
-
 
     # Transform count matrix by loop over thresholds 
     for (i in threshold_list){
@@ -217,9 +200,6 @@ SCN_run <- function (level, method) {
         expTest <- as.data.frame(transformed[common.genes, ]) # filter test set for common genes 
         # SCN prediction
         levelRes_val_all = scn_predict(cnProc=level_info[['cnProc']], expDat = expTest, nrand = 0)  # Removed rand # number of training and validation cells must be equal. genes in model must be in validation set. 
-        # # SCN model assessment | remove for deployment
-        # tm_heldoutassessment = assess_comm(ct_scores = levelRes_val_all, stTrain = stTrain, stQuery = stTest, dLevelSID = "Cell", classTrain = level, classQuery = level, nRand = 0)
-        # AUC.SCN <- tm_heldoutassessment$AUPRC_w #  AUC value from SCN package
 
         #  model assessment (pROC package)
         ## Remove Rand 
@@ -236,21 +216,6 @@ SCN_run <- function (level, method) {
 
         cat(paste('SCN-AUC =', AUC.SCN), "\n") # diagnostic
         cat(paste('pROC-AUC =', AUC.pROC), "\n") # diagnostic
-
-        # ## Plot performance metrics 
-        # cat('Generating plots', "\n")
-        # # plots 
-        # pdf(paste(sub.dir.perf, '/', method, '_', level, '_', threshold, '.pdf', sep = ''))
-        #         hist(total.UMI, main = paste(table_type, '_', method, '_', level, '_', threshold, sep = ''))         
-        #         hist(total.genes, main = paste(table_type, '_', method, '_', level, '_', threshold, sep = ''))
-        #         plot(plot_PRs(tm_heldoutassessment))
-        #         plot(plot_metrics(tm_heldoutassessment))
-        #         if (max(total.UMI) != 0) {  
-        #             coeff <- round(cor(total.UMI, total.genes), 2)
-        #             plot(log10(total.UMI), log10(total.genes), pch = 20, cex = 0.2,  
-        #             main = paste('Transformed using', method, 'at threshold', i, table_type), sub = paste("Pearson's coefficient =", coeff), 
-        #             xlab = "log10 number of UMI", ylab = "log10 number of unique genes" )}
-        # dev.off()
 
         avg.UMI <- mean(total.UMI)
         avg.genes <- mean(total.genes)
